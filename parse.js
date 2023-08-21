@@ -58,10 +58,13 @@ const getGroupId = ids => {
 
 // global variables
 const restTaskType = new Set();
+const checkPerformanceRead = {};
 
 // start to parse
-const [key] = Object.keys(mainMissionMap); // TODO: loop
-// const key = '1010101';
+const keys = Object.keys(mainMissionMap).filter(s => mainMissionMap[s].Type === 'Main');
+
+keys.forEach(key => {
+
 console.log(key);
 
 const mission = mainMissionMap[key];
@@ -97,7 +100,6 @@ while (list.length > 0) {
 
 const dialogs = [];
 
-const checkPerformanceRead = {};
 sortedSubMissionList.forEach(SubMission => {
   const { ID, MissionJsonPath } = SubMission;
   if (!MissionJsonPath) {
@@ -154,6 +156,8 @@ if (fs.existsSync(ActsDirPath)) {
     JSON.stringify(others, undefined, 2)
   );
 }
+
+});
 
 /**
  * SequenceObject::
@@ -296,11 +300,9 @@ function parseTask(Task) {
                               options[from].push(...mis);
                             } catch (err) {
                               const optionKeys = Object.keys(options);
-                              if (optionKeys.length === 1) {
-                                options[optionKeys[0]].push(...mis);
-                              } else {
-                                throw err;
-                              }
+                              options[optionKeys[0]].push(...mis);
+                              // FIXME: 코드 망했음
+                              // 분기가 없는 경우같은 게 있는 것 같음
                             }
                           }
                           if (optionCounts === 0) {
@@ -350,6 +352,13 @@ function parseTask(Task) {
         return;
       }
       const { CaptionPath } = VideoConfig[VideoID];
+      if (!CaptionPath) {
+        return {
+          type: 'PlayVideo',
+          VideoID,
+          captions: [],
+        };
+      }
       const Caption = readJsonFile(rp(CaptionPath));
       const { CaptionList } = Caption;
       const captions = CaptionList.map(({ CaptionTextID }) => t(CaptionTextID));
@@ -404,6 +413,13 @@ function parseTask(Task) {
       switch (Type) {
         case 'Cutscene': {
           const { CaptionPath, CutSceneName } = CutSceneConfig[TimelineName];
+          if (!CaptionPath) {
+            return {
+              type: 'Cutscene',
+              captions: [],
+              name: CutSceneName,
+            };
+          }
           const Caption = readJsonFile(rp(CaptionPath));
           const { CaptionList } = Caption;
           const captions = CaptionList.map(({ CaptionTextID }) => t(CaptionTextID));
@@ -466,8 +482,8 @@ function parseTask(Task) {
       return {
         type: 'PredicateTaskList',
         Predicate,
-        success: parseTaskList(SuccessTaskList),
-        failed: parseTaskList(FailedTaskList),
+        success: SuccessTaskList ? parseTaskList(SuccessTaskList) : [],
+        failed: FailedTaskList ? parseTaskList(FailedTaskList) : [],
       };
     }
     default: {
