@@ -67,7 +67,7 @@ const keys = Object.keys(mainMissionMap)
 keys.forEach(key => {
 
 console.log('========================================================================');
-console.log('MainMisson:', key);
+console.log('MainMisson:', key, t(mainMissionMap[key].Name));
 console.log('------------------------------------------------------------------------');
 
 const mission = mainMissionMap[key];
@@ -486,7 +486,10 @@ function parseTask(Task) {
       const { MessageSectionID } = Task;
       // ExcelOutput/MessageSectionConfig.json
       // ExcelOutput/MessageItemConfig.json
-      break;
+      return {
+        type: 'PlayMessage',
+        MessageSectionID,
+      };
     }
     case 'RPG.GameCore.PredicateTaskList': {
       const { SuccessTaskList, FailedTaskList, Predicate } = Task;
