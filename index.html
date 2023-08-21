@@ -1,0 +1,157 @@
+<!doctype html>
+<head>
+  <meta charset="utf-8" />
+</head>
+<body>
+
+<script>
+// 1.2 output_5235771_488ade4f6e
+// from https://paimooon.github.io/translate
+const translationFileUrls = {
+  cn: 'https://glglgozz.leeingnyo.me/honkai-starrail-translation/MergeTextmap_cn.json',
+  en: 'https://glglgozz.leeingnyo.me/honkai-starrail-translation/MergeTextmap_en.json',
+  kr: 'https://glglgozz.leeingnyo.me/honkai-starrail-translation/MergeTextmap_kr.json',
+};
+const fetchJson = url => fetch(url).then(res => res.json());
+
+// fetch
+const translationJsonPromise = Object.entries(translationFileUrls)
+  .map(([key, url]) => [key, fetchJson(url)])
+  .reduce(async (map, [key, json]) => ({ ...(await map), [key]: await json }), {});
+
+// parse
+const parsedJson = (locale = 'kr') => translationJsonPromise.then(translationJson => {
+  const merge = (map = {}, [key, ...restKeys], value) => {
+    // console.log('merge', map, key, restKeys, value);
+    return restKeys.length === 0 ?
+      Object.assign(map, { [key]: value }) :
+      Object.assign(map, {
+        /*
+        ChallengeTargetName_2, ChallengeTargetName_2_0 와 같은 이상한 경우가 있음
+        { ChallengeTargetName: { 2: {
+          '': ChallengeTargetName_2
+          '0': ChallengeTargetName_2_0
+        } } }
+        로 표현하기로 함
+        */
+        [key]: typeof map[key] === 'object' && map[key] !== null || typeof map[key] === 'undefined' ?
+          merge(map[key], restKeys, value) : 
+          // 불청객 존재. 위 규칙 따름
+          merge({ '': map[key] }, restKeys, value)
+      });
+  }
+  return Object.entries(translationJson[locale])
+    .map(([key, value]) => [key.split('_'), value])
+    // .reduce((map, [keys, value]) => (console.log('------'), console.log(keys), merge(map, keys, value)), {});
+    .reduce((map, [keys, value]) => merge(map, keys, value), {});
+});
+
+class MainMission {
+  /*
+  id: string; 7자리 숫자
+  name: string;
+  subMissions: SubMission[];
+  */
+  constructor(id, name) {
+    this.id = id;
+    this.name = name;
+    this.subMissions = [];
+  }
+
+  addSubMissions(...subMissions) {
+    this.subMissions.push(...subMissions);
+  }
+}
+
+class SubMission {
+  /*
+  mainMissionId: string; // 7자리 숫자
+  id: string; // 위 7자리를 포함한 9자리 숫자
+  targetText: string;
+  descrptionText: string;
+  */
+  constructor(mainMissionId, id, targetText, descriptionText) {
+    this.mainMissionId = mainMissionId;
+    this.id = id;
+    this.targetText = targetText;
+    this.descriptionText = descriptionText;
+  }
+}
+
+class TalkSentenceConfigTalkSentenceText {
+  /*
+  id: string; // 9자리 숫자. 막장임. 뒤에서 1~3자리가 순차적으로 있으면 이어지는 대화일 것
+  message: string;
+  */
+  constructor(id, groupId, message) {
+    this.id = id;
+    this.groupId = groupId;
+    this.message = message;
+  }
+}
+
+class Message {
+  /*
+  */
+}
+
+// to object
+const parsedData = parsedJson().then(json => {
+  console.log(json);
+  const mainMissions = Object.entries(json.MainMission.Name).map(([id, name]) => new MainMission(id, name));
+  const subMissionTargetTexts = json['SubMission']['TargetText'];
+  const subMissionDescrptionTexts = json['SubMission']['DescrptionText']; // Descrption 뭐냐
+  mainMissions.forEach(mainMission => {
+    const { id: mainMissionId } = mainMission;
+    const subMissionIds = [...new Set([
+      ...Object.keys(subMissionTargetTexts).filter(subMissionId => subMissionId.startsWith(mainMissionId)),
+      ...Object.keys(subMissionDescrptionTexts).filter(subMissionId => subMissionId.startsWith(mainMissionId)),
+    ])].sort();
+    const subMissions = subMissionIds.map(subMissionId => {
+      const tt = subMissionTargetTexts[subMissionId];
+      const dt = subMissionDescrptionTexts[subMissionId];
+      return new SubMission(mainMissionId, subMissionId, tt, dt);
+    });
+    mainMission.addSubMissions(...subMissions);
+  });
+
+  const talkSentenceConfigTalkSentenceTextMap = json['TalkSentenceConfig']['TalkSentenceText'];
+  const talkSentenceConfigTalkSentenceTextEntries = Object.entries(talkSentenceConfigTalkSentenceTextMap);
+  const talkSentenceConfigTalkSentenceTextEntriesParsed = talkSentenceConfigTalkSentenceTextEntries
+    .map(([key, ...rest]) => [key.split(''), ...rest])
+  const { groupIds } = talkSentenceConfigTalkSentenceTextEntriesParsed
+    .reduce(
+      (result, [keys, textIndex, value], index, array) => {
+        const { groupIds, common } = result;
+        if (index + 1 < array.length) {
+          const [nextKeys, nextTextIndex] = array[index + 1];
+          /*
+          result.groupIds.push(common.join(''));
+          result.common = [...nextKeys];
+          return result;
+          */
+        }
+        return result;
+      },
+      { groupIds: [], common: [...talkSentenceConfigTalkSentenceTextEntriesParsed[0][0]] }
+    );
+  /*
+  const talkStreams = talkSentenceConfigTalkSentenceTextsWithIndex
+    .map(([key, ...rest]) => [key.split(''), ...rest])
+    .reduce((map, [keys, textIndex, value], index, array) => {
+      return Object.assign(map, { });
+    }, {});
+  */
+
+  console.log(groupIds);
+
+  return {
+    mainMissions,
+    // talkStreams,
+  };
+});
+
+parsedData.then(console.log);
+</script>
+
+</body>
