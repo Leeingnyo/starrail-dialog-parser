@@ -61,11 +61,14 @@ const restTaskType = new Set();
 const checkPerformanceRead = {};
 
 // start to parse
-const keys = Object.keys(mainMissionMap).filter(s => mainMissionMap[s].Type === 'Main');
+const keys = Object.keys(mainMissionMap)
+  // .filter(s => mainMissionMap[s].Type === 'Main');
 
 keys.forEach(key => {
 
-console.log(key);
+console.log('========================================================================');
+console.log('MainMisson:', key);
+console.log('------------------------------------------------------------------------');
 
 const mission = mainMissionMap[key];
 const MissionInfoPath = getMissionInfoPath(key);
@@ -90,10 +93,12 @@ while (list.length > 0) {
   }
 
   if (count > SubMissionList.length * (SubMissionList.length + 1) / 2) { // 망함
-    console.log('뭔가 이상함');
     SubMissionList.forEach(SubMission => {
-      console.log(SubMission.ID, ' ---> ', SubMission.TakeParamIntList);
+      // console.debug(SubMission.ID, ' ---> ', SubMission.TakeParamIntList);
     });
+    console.log('------------');
+    console.log('Sorting SubMissionList Failed:', key);
+    console.log('------------');
     break;
   }
 }
@@ -113,6 +118,7 @@ sortedSubMissionList.forEach(SubMission => {
   }
 });
 
+console.log('--------------- MainMission Dialog ---------');
 console.log(
   JSON.stringify(dialogs, undefined, 2)
 );
@@ -132,6 +138,7 @@ if (fs.existsSync(TalksDirPath)) {
     }
   });
 
+  console.log('--------------- Talk Dialog ---------');
   console.log(
     JSON.stringify(others, undefined, 2)
   );
@@ -152,6 +159,7 @@ if (fs.existsSync(ActsDirPath)) {
     }
   });
 
+  console.log('--------------- Acts Dialog ---------');
   console.log(
     JSON.stringify(others, undefined, 2)
   );
@@ -188,6 +196,9 @@ function parseTask(Task) {
     }
     case 'RPG.GameCore.TriggerPerformance': {
       const { PerformanceType, PerformanceID } = Task;
+      if (!performanceMap?.[PerformanceType]?.[PerformanceID]) {
+        return;
+      }
       const { PerformancePath } = performanceMap[PerformanceType][PerformanceID];
       const Performance = readJsonFile(rp(PerformancePath));
 
@@ -222,7 +233,7 @@ function parseTask(Task) {
 
           // 만약 옵션 텍스트가 살아있다면 고칠 수도 있지 않을까?
           if (options.length === 0) {
-            console.log('복구 불가', flattened);
+            console.warn('복구 불가', flattened);
             return {
               type: 'TriggerPerformance',
               PerformanceType,
@@ -285,7 +296,7 @@ function parseTask(Task) {
                         case 'ComplexTalk': { break; }
                         case 'TriggerCustomString': {
                           if (optionCounts === 0) {
-                            console.log('뭔가 이상함');
+                            // console.log('뭔가 이상함');
                             return;
                           }
                           optionCounts -= 1;
@@ -340,7 +351,7 @@ function parseTask(Task) {
           };
         }
         default: {
-          console.log('Unknown PerformanceType', PerformanceType, Task);
+          // console.warn('Unknown PerformanceType', PerformanceType, Task);
           break;
         }
       }
@@ -487,7 +498,7 @@ function parseTask(Task) {
       };
     }
     default: {
-      console.log('Unknown Task', JSON.stringify(Task, undefined, 2));
+      // console.warn('Unknown Task', JSON.stringify(Task, undefined, 2));
       restTaskType.add(type);
       break;
     }
