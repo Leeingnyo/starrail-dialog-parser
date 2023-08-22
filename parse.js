@@ -5,46 +5,42 @@ const sep = require('path').sep;
 const readJsonFile = path => JSON.parse(fs.readFileSync(path, { encoding: 'utf-8' }));
 
 // path utils
-const currentPath = `.${sep}StarRailData${sep}`;
-const rp = path => `${currentPath}${path}`;
-const mainMissionMap = readJsonFile(rp('ExcelOutput/MainMission.json'));
-const ConfigLevelMissionPath = rp('Config/Level/Mission');
+const currentPath = `.${sep}StarRailData`;
+const normalizePath = path => `${currentPath}${sep}${path}`;
+const mainMissionMap = readJsonFile(normalizePath('ExcelOutput/MainMission.json'));
+const ConfigLevelMissionPath = normalizePath('Config/Level/Mission');
 const getMissionInfoPath = key => `${ConfigLevelMissionPath}${sep}${key}${sep}MissionInfo_${key}.json`;
 const getTalksDirPath = key => `Config/Level/Mission${sep}${key}${sep}Talk`;
 const getActsDirPath = key => `Config/Level/Mission${sep}${key}${sep}Act`;
 
-/**
- * { [talkSentenceId: string]: string }
- */
+// Static Data
+const performanceMap = {
+  A: readJsonFile(normalizePath('ExcelOutput/PerformanceA.json')), // Act
+  C: readJsonFile(normalizePath('ExcelOutput/PerformanceC.json')), // Cutscene
+  CG: readJsonFile(normalizePath('ExcelOutput/PerformanceCG.json')),
+  D: readJsonFile(normalizePath('ExcelOutput/PerformanceD.json')), // ?
+  DS: readJsonFile(normalizePath('ExcelOutput/PerformanceDS.json')),
+  E: readJsonFile(normalizePath('ExcelOutput/PerformanceE.json')), // ?
+  RecallData: readJsonFile(normalizePath('ExcelOutput/PerformanceRecallData.json')),
+  PlayVideo: readJsonFile(normalizePath('ExcelOutput/PerformanceVideo.json')),
+};
+const VideoConfig = readJsonFile(normalizePath('ExcelOutput/VideoConfig.json'));
+const CutSceneConfig = readJsonFile(normalizePath('ExcelOutput/CutSceneConfig.json'));
+const TalkSentenceConfig = readJsonFile(normalizePath('ExcelOutput/TalkSentenceConfig.json'));
+const TextMap = readJsonFile(normalizePath('TextMap/TextMapKR.json'));
+
 const talkUsedMap = {};
-const textMapRawHash = readJsonFile(rp('TextMap/TextMapKR.json'));
-const TalkSentenceConfig = readJsonFile(rp('ExcelOutput/TalkSentenceConfig.json'));
 const TalkSentenceConfigKeys = Object.keys(TalkSentenceConfig);
-const t = hash => textMapRawHash[hash?.Hash ?? hash]; // hash
+const t = hash => TextMap[hash?.Hash ?? hash]; // hash
 const tt = tk => {
   if (!TalkSentenceConfig[tk]) {
     return;
   }
   const { TextmapTalkSentenceName: name, TalkSentenceText: text } = TalkSentenceConfig[tk];
-  talkUsedMap[tk] = 1;
+  talkUsedMap[tk] = 1; // check as used
   return { TalkSentenceID: tk, name: t(name), text: t(text) };
 }
 const getGroupTalkKeys = groupId => TalkSentenceConfigKeys.filter(key => key.startsWith(groupId) && key.length === 9);
-
-// performance utils
-const performanceMap = {
-  A: readJsonFile(rp('ExcelOutput/PerformanceA.json')), // Act
-  C: readJsonFile(rp('ExcelOutput/PerformanceC.json')), // Cutscene
-  CG: readJsonFile(rp('ExcelOutput/PerformanceCG.json')),
-  D: readJsonFile(rp('ExcelOutput/PerformanceD.json')), // ?
-  DS: readJsonFile(rp('ExcelOutput/PerformanceDS.json')),
-  E: readJsonFile(rp('ExcelOutput/PerformanceE.json')), // ?
-  RecallData: readJsonFile(rp('ExcelOutput/PerformanceRecallData.json')),
-  PlayVideo: readJsonFile(rp('ExcelOutput/PerformanceVideo.json')),
-};
-const VideoConfig = readJsonFile(rp('ExcelOutput/VideoConfig.json'));
-const CutSceneConfig = readJsonFile(rp('ExcelOutput/CutSceneConfig.json'));
-
 
 // utils
 const getGroupId = ids => {
@@ -60,125 +56,128 @@ const getGroupId = ids => {
 const restTaskType = new Set();
 const checkPerformanceRead = {};
 
+/**
+ * application context
+ */
+const context = { checkPerformanceRead, talkUsedMap, restTaskType };
+
 // start to parse
-const keys = Object.keys(mainMissionMap)
-  // .filter(s => mainMissionMap[s].Type === 'Main');
+const keys = Object.keys(mainMissionMap);
+let givenKeys = ['1000101']; // TODO: 조절 혹은 arguments
 
-keys.forEach(key => {
+(givenKeys.length ? givenKeys : keys).forEach(key => {
+  console.log('========================================================================');
+  console.log('MainMisson:', key, t(mainMissionMap[key].Name));
+  console.log('------------------------------------------------------------------------');
 
-console.log('========================================================================');
-console.log('MainMisson:', key, t(mainMissionMap[key].Name));
-console.log('------------------------------------------------------------------------');
+  const mission = mainMissionMap[key];
+  const MissionInfoPath = getMissionInfoPath(key);
+  const MissionInfo = readJsonFile(MissionInfoPath);
+  const { SubMissionList } = MissionInfo;
 
-const mission = mainMissionMap[key];
-const MissionInfoPath = getMissionInfoPath(key);
-const MissionInfo = readJsonFile(MissionInfoPath);
-const { SubMissionList } = MissionInfo;
+  const list = [...SubMissionList];
+  const map = {};
+  const sortedSubMissionList = [];
+  let count = 0;
+  let successSorting = true;
+  while (list.length > 0) {
+    count += 1;
+    const SubMission = list.shift();
+    if (SubMission.TakeParamIntList === undefined || SubMission.TakeParamIntList.length === 0) { // 아무도 없으면
+      map[SubMission.ID] = 1;
+      sortedSubMissionList.push(SubMission);
+    } else if (SubMission.TakeParamIntList.every(id => map[id] === 1)) { // 다 나갔으면
+      map[SubMission.ID] = 1;
+      sortedSubMissionList.push(SubMission);
+    } else {
+      list.push(SubMission); // 다음 기회에~
+    }
 
-const list = [...SubMissionList];
-const map = {};
-const sortedSubMissionList = [];
-let count = 0;
-let successSorting = true;
-while (list.length > 0) {
-  count += 1;
-  const SubMission = list.shift();
-  if (SubMission.TakeParamIntList === undefined || SubMission.TakeParamIntList.length === 0) { // 아무도 없으면
-    map[SubMission.ID] = 1;
-    sortedSubMissionList.push(SubMission);
-  } else if (SubMission.TakeParamIntList.every(id => map[id] === 1)) { // 다 나갔으면
-    map[SubMission.ID] = 1;
-    sortedSubMissionList.push(SubMission);
-  } else {
-    list.push(SubMission); // 다음 기회에~
+    if (count > SubMissionList.length * (SubMissionList.length + 1) / 2) { // 망함
+      SubMissionList.forEach(SubMission => {
+        // console.debug(SubMission.ID, ' ---> ', SubMission.TakeParamIntList);
+      });
+      console.log('------------');
+      console.log('Sorting SubMissionList Failed:', key);
+      console.log('------------');
+      successSorting = false;
+      break;
+    }
   }
 
-  if (count > SubMissionList.length * (SubMissionList.length + 1) / 2) { // 망함
-    SubMissionList.forEach(SubMission => {
-      // console.debug(SubMission.ID, ' ---> ', SubMission.TakeParamIntList);
+  const dialogs = [];
+
+  (successSorting ? sortedSubMissionList : SubMissionList).forEach(SubMission => {
+    const { ID, MissionJsonPath } = SubMission;
+    if (!MissionJsonPath) {
+      return;
+    }
+    try {
+      const MissionJson = readJsonFile(normalizePath(MissionJsonPath));
+
+      const dialog = parseSequenceObject(MissionJson, context);
+      if (dialog.length) {
+        dialogs.push({ ID, dialog });
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  });
+
+  console.log('--------------- MainMission Dialog ---------');
+  console.log(
+    JSON.stringify(dialogs, undefined, 2)
+  );
+
+  // Items
+  const TalksDirPath = getTalksDirPath(key)
+  if (fs.existsSync(normalizePath(TalksDirPath))) {
+    const others = [];
+
+    const list = fs.readdirSync(normalizePath(TalksDirPath));
+    list.map(filename => `${TalksDirPath}${sep}${filename}`).forEach(talkPath => {
+      try {
+        const talkJson = readJsonFile(normalizePath(talkPath));
+
+        const dialog = parseSequenceObject(talkJson, context);
+        if (dialog.length) {
+          others.push({ dialog });
+        }
+      } catch (err) {
+        console.error(err);
+      }
     });
-    console.log('------------');
-    console.log('Sorting SubMissionList Failed:', key);
-    console.log('------------');
-    successSorting = false;
-    break;
+
+    console.log('--------------- Talk Dialog ---------');
+    console.log(
+      JSON.stringify(others, undefined, 2)
+    );
   }
-}
 
-const dialogs = [];
+  // Acts
+  const ActsDirPath = getActsDirPath(key)
+  if (fs.existsSync(normalizePath(ActsDirPath))) {
+    const others = [];
 
-(successSorting ? sortedSubMissionList : SubMissionList).forEach(SubMission => {
-  const { ID, MissionJsonPath } = SubMission;
-  if (!MissionJsonPath) {
-    return;
-  }
-  try {
-    const MissionJson = readJsonFile(rp(MissionJsonPath));
+    const list = fs.readdirSync(normalizePath(ActsDirPath));
+    list.map(filename => `${ActsDirPath}${sep}${filename}`).filter(s => !checkPerformanceRead[s]).forEach(actPath => {
+      try {
+        const actJson = readJsonFile(normalizePath(actPath));
 
-    const dialog = parseSequenceObject(MissionJson);
-    if (dialog.length) {
-      dialogs.push({ ID, dialog });
-    }
-  } catch (err) {
-    console.error(err);
-  }
-});
-
-console.log('--------------- MainMission Dialog ---------');
-console.log(
-  JSON.stringify(dialogs, undefined, 2)
-);
-
-// Items
-const TalksDirPath = getTalksDirPath(key)
-if (fs.existsSync(rp(TalksDirPath))) {
-  const others = [];
-
-  const list = fs.readdirSync(rp(TalksDirPath));
-  list.map(filename => `${TalksDirPath}${sep}${filename}`).forEach(talkPath => {
-    try {
-      const talkJson = readJsonFile(rp(talkPath));
-
-      const dialog = parseSequenceObject(talkJson);
-      if (dialog.length) {
-        others.push({ dialog });
+        const dialog = parseSequenceObject(actJson, context);
+        if (dialog.length) {
+          others.push({ dialog });
+        }
+      } catch (err) {
+        console.error(err);
       }
-    } catch (err) {
-      console.error(err);
-    }
-  });
+    });
 
-  console.log('--------------- Talk Dialog ---------');
-  console.log(
-    JSON.stringify(others, undefined, 2)
-  );
-}
-
-// Acts
-const ActsDirPath = getActsDirPath(key)
-if (fs.existsSync(rp(ActsDirPath))) {
-  const others = [];
-
-  const list = fs.readdirSync(rp(ActsDirPath));
-  list.map(filename => `${ActsDirPath}${sep}${filename}`).filter(s => !checkPerformanceRead[s]).forEach(actPath => {
-    try {
-      const actJson = readJsonFile(rp(actPath));
-
-      const dialog = parseSequenceObject(actJson);
-      if (dialog.length) {
-        others.push({ dialog });
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  });
-
-  console.log('--------------- Acts Dialog ---------');
-  console.log(
-    JSON.stringify(others, undefined, 2)
-  );
-}
-
+    console.log('--------------- Acts Dialog ---------');
+    console.log(
+      JSON.stringify(others, undefined, 2)
+    );
+  }
 });
 
 /**
@@ -186,10 +185,10 @@ if (fs.existsSync(rp(ActsDirPath))) {
  * MissionJson, Performance
  * @returns DialogSequence
  */
-function parseSequenceObject({ OnInitSequece, OnStartSequece }) {
+function parseSequenceObject({ OnInitSequece, OnStartSequece }, context) {
   const dialog = [];
   OnStartSequece.forEach(Sequence => {
-    const parsed = parseTaskList(Sequence.TaskList);
+    const parsed = parseTaskList(Sequence.TaskList, context);
     if (parsed.length) {
       dialog.push(parsed);
     }
@@ -197,12 +196,19 @@ function parseSequenceObject({ OnInitSequece, OnStartSequece }) {
   return dialog;
 }
 
-function parseTaskList(TaskList = []) {
-  return TaskList.map(Task => parseTask(Task)).filter(s => s);
+function parseTaskList(TaskList = [], context) {
+  return TaskList.map(Task => parseTask(Task, context)).filter(s => s);
 }
 
-function parseTask(Task) {
+/*
+ * context 
+ * - checkPerformanceRead
+ * - talkUsedMap
+ * - restTaskType
+ */
+function parseTask(Task, context = {}) {
   const { $type: type } = Task;
+  const { checkPerformanceRead, talkUsedMap, restTaskType } = context;
   switch (type) {
     case 'RPG.GameCore.FinishPerformanceMission': {
       // console.log(`SubMission ${ID} 종료`);
@@ -210,39 +216,41 @@ function parseTask(Task) {
     }
     case 'RPG.GameCore.TriggerPerformance': {
       const { PerformanceType, PerformanceID } = Task;
-      if (!performanceMap?.[PerformanceType]?.[PerformanceID]) {
+      if (!performanceMap[PerformanceType]?.[PerformanceID]) {
         return;
       }
       const { PerformancePath } = performanceMap[PerformanceType][PerformanceID];
       try {
-        const Performance = readJsonFile(rp(PerformancePath));
+        const Performance = readJsonFile(normalizePath(PerformancePath));
 
-        checkPerformanceRead[PerformancePath] = 1; // check as read
+        if (checkPerformanceRead) {
+          checkPerformanceRead[PerformancePath] = 1; // check as read
+        }
 
         switch (PerformanceType) {
           case 'PlayVideo': {
             return {
               type: 'TriggerPerformance',
               PerformanceType,
-              content: parseSequenceObject(Performance),
+              content: parseSequenceObject(Performance, context),
             };
           }
           case 'A': { // 자막 붙는 컷씬
             return {
               type: 'TriggerPerformance',
               PerformanceType,
-              content: parseSequenceObject(Performance),
+              content: parseSequenceObject(Performance, context),
             };
           }
           case 'D': { // 심플 토크
             return {
               type: 'TriggerPerformance',
               PerformanceType,
-              content: parseSequenceObject(Performance),
+              content: parseSequenceObject(Performance, context),
             };
           }
           case 'C': { // 인게임 컷씬 (나쁜 것)
-            const parsed = parseSequenceObject(Performance);
+            const parsed = parseSequenceObject(Performance, context);
             const flattened = parsed.flatMap(_ => _);
             const options = flattened.filter(obj => obj.type === 'PlayOptionTalk');
 
@@ -261,7 +269,7 @@ function parseTask(Task) {
             const missing = 9 - groupId.length;
 
             const missingRestTalkKeys = getGroupTalkKeys(groupId);
-            const missingRestTalks = missingRestTalkKeys.filter(key => !talkUsedMap[key]).map(key => ({ key, text: tt(key) }));
+            const missingRestTalks = missingRestTalkKeys.filter(key => !talkUsedMap?.[key]).map(key => ({ key, text: tt(key) }));
 
             /* 구데기 코드 시작 */
             const getMissingsBetween = (min, max) => missingRestTalks.filter(({ key }) => min <= key && (max === undefined || key < max));
@@ -362,7 +370,7 @@ function parseTask(Task) {
             return {
               type: 'TriggerPerformance',
               PerformanceType,
-              content: parseSequenceObject(Performance),
+              content: parseSequenceObject(Performance, context),
             };
           }
           default: {
@@ -390,7 +398,7 @@ function parseTask(Task) {
         };
       }
       try {
-        const Caption = readJsonFile(rp(CaptionPath));
+        const Caption = readJsonFile(normalizePath(CaptionPath));
         const { CaptionList } = Caption;
         const captions = CaptionList.map(({ CaptionTextID }) => t(CaptionTextID));
         return {
@@ -419,7 +427,7 @@ function parseTask(Task) {
     }
     case 'RPG.GameCore.PropSetupUITrigger': {
       const { ButtonCallback } = Task; 
-      const returns = parseTaskList(ButtonCallback);
+      const returns = parseTaskList(ButtonCallback, context);
       return {
         type: 'PropSetupUITrigger',
         returns,
@@ -459,7 +467,7 @@ function parseTask(Task) {
             };
           }
           try {
-            const Caption = readJsonFile(rp(CaptionPath));
+            const Caption = readJsonFile(normalizePath(CaptionPath));
             const { CaptionList } = Caption;
             const captions = CaptionList.map(({ CaptionTextID }) => t(CaptionTextID));
             return {
@@ -528,8 +536,8 @@ function parseTask(Task) {
       return {
         type: 'PredicateTaskList',
         Predicate,
-        success: SuccessTaskList ? parseTaskList(SuccessTaskList) : [],
-        failed: FailedTaskList ? parseTaskList(FailedTaskList) : [],
+        success: SuccessTaskList ? parseTaskList(SuccessTaskList, context) : [],
+        failed: FailedTaskList ? parseTaskList(FailedTaskList, context) : [],
       };
     }
     default: {
@@ -584,6 +592,7 @@ function parseTask(Task) {
   }
 }
 
+console.log('====== summary =======');
 console.log('-------------');
 console.log('resetTaskType');
 console.log(JSON.stringify([...restTaskType], undefined, 2));
@@ -591,6 +600,6 @@ console.log('-------------');
 
 const notUsedTalkKeys = TalkSentenceConfigKeys.filter(tk => !talkUsedMap[tk]);
 console.log('-------------');
-console.log('missing talk ids num:', notUsedTalkKeys.length);
+console.log('missing talk ids num:', notUsedTalkKeys.length, '/', TalkSentenceConfigKeys.length);
 console.log(JSON.stringify(notUsedTalkKeys, undefined, 2));
 console.log('-------------');
