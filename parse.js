@@ -62,7 +62,11 @@ const checkPerformanceRead = {};
  */
 const context = { checkPerformanceRead, talkUsedMap, restTaskType };
 
-// start to parse
+// ===================================================
+// APPLICATION START
+// ===================================================
+{
+
 const keys = Object.keys(mainMissionMap);
 // TODO: 조절 혹은 arguments
 // const givenKeys = ['1000101'];
@@ -137,8 +141,8 @@ const givenKeys = [];
   if (fs.existsSync(normalizePath(TalksDirPath))) {
     const others = [];
 
-    const list = fs.readdirSync(normalizePath(TalksDirPath));
-    list.map(filename => `${TalksDirPath}${sep}${filename}`).forEach(talkPath => {
+    const filenames = fs.readdirSync(normalizePath(TalksDirPath));
+    filenames.map(filename => `${TalksDirPath}${sep}${filename}`).forEach(talkPath => {
       try {
         const talkJson = readJsonFile(normalizePath(talkPath));
 
@@ -162,8 +166,8 @@ const givenKeys = [];
   if (fs.existsSync(normalizePath(ActsDirPath))) {
     const others = [];
 
-    const list = fs.readdirSync(normalizePath(ActsDirPath));
-    list.map(filename => `${ActsDirPath}${sep}${filename}`).filter(s => !checkPerformanceRead[s]).forEach(actPath => {
+    const filenames = fs.readdirSync(normalizePath(ActsDirPath));
+    filenames.map(filename => `${ActsDirPath}${sep}${filename}`).filter(s => !checkPerformanceRead[s]).forEach(actPath => {
       try {
         const actJson = readJsonFile(normalizePath(actPath));
 
@@ -182,6 +186,23 @@ const givenKeys = [];
     );
   }
 });
+
+console.log('====== summary =======');
+console.log('-------------');
+console.log('resetTaskType');
+console.log(JSON.stringify([...restTaskType], undefined, 2));
+console.log('-------------');
+
+const notUsedTalkKeys = TalkSentenceConfigKeys.filter(tk => !talkUsedMap[tk]);
+console.log('-------------');
+console.log('missing talk ids num:', notUsedTalkKeys.length, '/', TalkSentenceConfigKeys.length);
+// console.log(JSON.stringify(notUsedTalkKeys, undefined, 2));
+console.log('-------------');
+
+}
+// ===================================================
+// APPLICATION END
+// ===================================================
 
 /**
  * SequenceObject::
@@ -209,6 +230,7 @@ function parseTaskList(TaskList = [], context) {
 
 /**
  * @types Talk { TalkSentenceID: string | number; name: string; text: string }
+ * @types OptionTalk { TalkSentenceID: string; isContinue: boolean; text: Talk }
  */
 
 /*
@@ -228,7 +250,7 @@ function parseTaskList(TaskList = [], context) {
  * | { type: 'PlayTimeline-ComplexTalk'; name: string }
  * | { type: 'PlayTimeline-ComplexTalk-Recovered'; name: string; speakings: Talk[] }
  * | { type: 'PlaySimpleTalk'; speakings: Talk[] }
- * | { type: 'PlayOptionTalk'; list: { TalkSentenceID: string; isContinue: boolean; text: Talk }[] }
+ * | { type: 'PlayOptionTalk'; options: OptionTalk[] }
  * | { type: 'PlayAndWaitSimpleTalk'; speakings: Talk[] }
  * | { type: 'PlayMessage'; MessageSectionID: string }
  * | { type: 'PredicateTaskList'; Predicate: unknown; success: ParsedTask[]; failed: ParsedTask[] }
@@ -304,7 +326,7 @@ function parseTask(Task, context = {}) {
               };
             }
 
-            const ids = optionTasks.flatMap(({ list }) => list.map(({ TalkSentenceID }) => TalkSentenceID)); // number[]
+            const ids = optionTasks.flatMap(({ options }) => options.map(({ TalkSentenceID }) => TalkSentenceID)); // number[]
             const groupId = getGroupId(ids).toString();
             const missing = 9 - groupId.length;
 
@@ -384,6 +406,7 @@ function parseTask(Task, context = {}) {
         returns,
       };
     }
+    case 'RPG.GameCore.TriggerCustomStringOnDialogEnd':
     case 'RPG.GameCore.TriggerCustomString': {
       const { CustomString: { Value } } = Task;
       return {
@@ -454,7 +477,7 @@ function parseTask(Task, context = {}) {
       const { OptionList } = Task;
       return {
         type: 'PlayOptionTalk',
-        list: OptionList.map(({ TalkSentenceID, OptionIconType }) => ({
+        options: OptionList.map(({ TalkSentenceID, OptionIconType }) => ({
           TalkSentenceID,
           isContinue: 'ChatContinueIcon' === OptionIconType,
           text: tt(TalkSentenceID),
@@ -468,10 +491,6 @@ function parseTask(Task, context = {}) {
         type: 'PlayAndWaitSimpleTalk',
         speakings,
       };
-    }
-    case 'RPG.GameCore.ShowTalkUI': {
-      // ?
-      break;
     }
     case 'RPG.GameCore.PlayMessage': {
       const { MessageSectionID } = Task;
@@ -537,6 +556,12 @@ function parseTask(Task, context = {}) {
     case 'RPG.GameCore.WaitSimpleTalkFinish':
     case 'RPG.GameCore.PropStateExecute':
     case 'RPG.GameCore.AdvEntityFaceTo':
+    case 'RPG.GameCore.ShowTalkUI':
+    case 'RPG.GameCore.AdvNpcFaceToPlayer':
+    case 'RPG.GameCore.CharacterHeadLookAt':
+    case 'RPG.GameCore.ClearTalkUI':
+    case 'RPG.GameCore.CollectDataConditions':
+    case 'RPG.GameCore.RandomConfig':
     case 'RPG.GameCore.PropMoveTo': {
       // ignored
     }
@@ -570,7 +595,7 @@ function parsePerformanceWithOptions(sequenceObject, missingRestTalks) {
     switch (element.type) {
       case 'PlayOptionTalk': {
         // console.log('옵션이다');
-        sortedOptions = element.list.map(({ TalkSentenceID }) => TalkSentenceID).sort();
+        sortedOptions = element.options.map(({ TalkSentenceID }) => TalkSentenceID).sort();
         to = sortedOptions[0];
         maxOptions = sortedOptions.at(-1);
         // console.log(from, '에서부터 ', to, '까지 넣는다');
@@ -579,11 +604,11 @@ function parsePerformanceWithOptions(sequenceObject, missingRestTalks) {
           results.push(mis);
         }
         // console.log('옵션 객체를 만든다');
-        options = element.list.reduce((map, { TalkSentenceID, text, isContinue }) => ({
+        options = element.options.reduce((map, { TalkSentenceID, text, isContinue }) => ({
           ...map,
           [TalkSentenceID]: [{ key: TalkSentenceID, text, isContinue }],
         }), {});
-        optionCounts = element.list.length;
+        optionCounts = element.options.length;
         break;
       }
       case 'WaitCustomString': {
@@ -634,14 +659,3 @@ function parsePerformanceWithOptions(sequenceObject, missingRestTalks) {
   return results;
 }
 
-console.log('====== summary =======');
-console.log('-------------');
-console.log('resetTaskType');
-console.log(JSON.stringify([...restTaskType], undefined, 2));
-console.log('-------------');
-
-const notUsedTalkKeys = TalkSentenceConfigKeys.filter(tk => !talkUsedMap[tk]);
-console.log('-------------');
-console.log('missing talk ids num:', notUsedTalkKeys.length, '/', TalkSentenceConfigKeys.length);
-console.log(JSON.stringify(notUsedTalkKeys, undefined, 2));
-console.log('-------------');
