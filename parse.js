@@ -13,6 +13,7 @@ const getMissionInfoPath = key => `${ConfigLevelMissionPath}${sep}${key}${sep}Mi
 const getDropsDirPath = key => `Config/Level/Mission${sep}${key}${sep}Drop`;
 const getTalksDirPath = key => `Config/Level/Mission${sep}${key}${sep}Talk`;
 const getActsDirPath = key => `Config/Level/Mission${sep}${key}${sep}Act`;
+const getBattlesDirPath = key => `Config/Level/Mission${sep}${key}${sep}Battle`;
 
 // Static Data
 const performanceMap = {
@@ -241,6 +242,7 @@ function handleGroupedMissions(missionGroupId, missionIds) {
     { name: 'drop', getPath: getDropsDirPath },
     { name: 'talk', getPath: getTalksDirPath },
     { name: 'act', getPath: getActsDirPath },
+    { name: 'battle', getPath: getBattlesDirPath },
   ];
 
   others.forEach(({ name, getPath }) => {
@@ -270,42 +272,56 @@ function handleGroupedMissions(missionGroupId, missionIds) {
   });
 
   // 남은 것 중 그룹이 같은 걸 찾아보기
-  const ids = removeDup(totalDialogs.flatMap(_ => _).flatMap(({ dialog }) => {
-    return [...JSON.stringify(dialog, undefined, 2).matchAll(/"TalkSentenceID": (\d+),/g)]
-      .map(matched => matched[1]);
-  }));
-  const groupIds = removeDup(ids.map(id => Math.floor(id / Math.pow(10, 2)).toString()));
-  const groupedMissingKeys = groupIds.flatMap(groupId => {
-    const TalkSentenceIDs = getGroupTalkKeys(groupId).filter(key => !talkUsedMap?.[key]);
-    if (!TalkSentenceIDs.length) return [];
-    return [{
-      groupId,
-      TalkSentenceIDs
-    }];
-  });
+  Promise.resolve().then(() => {
+    console.log('========================================================================');
+    console.log('MainMisson Related Missing Dialog:', missionGroupId);
+    console.log('MainMisson Group:', missionGroupId);
+    console.log('List::');
+    missionIds.forEach(missionId => {
+    console.log('-', t(mainMissionMap[missionId].Name));
+    });
+    console.log('------------------------------------------------------------------------');
+    const ids = removeDup(totalDialogs.flatMap(_ => _).flatMap(({ dialog }) => {
+      return [...JSON.stringify(dialog, undefined, 2).matchAll(/"TalkSentenceID": (\d+),/g)]
+        .map(matched => matched[1]);
+    }));
+    const groupIds = removeDup(ids.map(id => Math.floor(id / Math.pow(10, 2)).toString()));
+    const groupedMissingKeys = groupIds.flatMap(groupId => {
+      const TalkSentenceIDs = getGroupTalkKeys(groupId).filter(key => !talkUsedMap?.[key]);
+      if (!TalkSentenceIDs.length) return [];
+      return [{
+        groupId,
+        TalkSentenceIDs
+      }];
+    });
 
-  // TODO: Config/Level/NPCDialogue Config/Level/PropDialogue 를 추가로 봐야함
-  // 여기에 물건을 누르든지 NPC 에게 말을 거는 거든지 하는 게 있음
-  console.log(`--------------- Related Missing Dialog ---------`);
-  groupedMissingKeys.forEach(({ groupId, TalkSentenceIDs }) => {
-    console.log('groupId', groupId);
-    TalkSentenceIDs.forEach(TalkSentenceID => {
-    console.log('- Talk', TalkSentenceID, tt(TalkSentenceID));
+    // TODO: Config/Level/NPCDialogue Config/Level/PropDialogue 를 추가로 봐야함
+    // 여기에 물건을 누르든지 NPC 에게 말을 거는 거든지 하는 게 있음
+    console.log(`--------------- Related Missing Dialog ---------`);
+    groupedMissingKeys.forEach(({ groupId, TalkSentenceIDs }) => {
+      console.log('groupId', groupId);
+      TalkSentenceIDs.forEach(TalkSentenceID => {
+      console.log('- Talk', TalkSentenceID, tt(TalkSentenceID));
+      });
     });
   });
 }
 
-console.log('====== summary =======');
-console.log('-------------');
-console.log('resetTaskType');
-console.log(JSON.stringify([...restTaskType], undefined, 2));
-console.log('-------------');
 
-const notUsedTalkKeys = TalkSentenceConfigKeys.filter(tk => !talkUsedMap[tk]);
-console.log('-------------');
-console.log('missing talk ids num:', notUsedTalkKeys.length, '/', TalkSentenceConfigKeys.length);
-console.log(JSON.stringify(notUsedTalkKeys.map(key => tt(key)).filter(({ text }) => text), undefined, 2));
-console.log('-------------');
+Promise.resolve().then(() => {
+  console.log('====== summary =======');
+  console.log('-------------');
+  console.log('resetTaskType');
+  console.log(JSON.stringify([...restTaskType], undefined, 2));
+  console.log('-------------');
+
+
+  const notUsedTalkKeys = TalkSentenceConfigKeys.filter(tk => !talkUsedMap[tk]);
+  console.log('-------------');
+  console.log('missing talk ids num:', notUsedTalkKeys.length, '/', TalkSentenceConfigKeys.length);
+  console.log(JSON.stringify(notUsedTalkKeys.map(key => tt(key)).filter(({ text }) => text), undefined, 2));
+  console.log('-------------');
+});
 
 }
 // ===================================================
@@ -651,61 +667,85 @@ function parseTask(Task, context = {}) {
         callback,
       };
     }
+    case 'RPG.GameCore.NpcToPlayerDistanceTrigger': {
+      const { FarTask } = Task;
+      const callback = parseTaskList(FarTask, context);
+      return {
+        type: 'NpcToPlayerDistanceTrigger',
+        callback,
+      };
+    }
+    case 'RPG.GameCore.ConsumeMissionItemPerformance': {
+      const { OnSubmitConfirm, OnSubmitCancel } = Task;
+      const submit = parseTaskList(OnSubmitConfirm, context);
+      const cancel = parseTaskList(OnSubmitCancel, context);
+      return {
+        type: 'ConsumeMissionItemPerformance',
+        submit,
+        cancel,
+      };
+    }
+    case 'RPG.GameCore.SelectMissionItem': {
+      const { SimpleTalk, ItemSelect, OnSubmitSucceed, OnSubmitFail, OnSubmitCancel } = Task;
+      const success = parseTaskList(OnSubmitSucceed, context);
+      const fail = parseTaskList(OnSubmitFail, context);
+      const cancel = parseTaskList(OnSubmitCancel, context);
+      return {
+        type: 'SelectMissionItem',
+        text: tt(SimpleTalk.TalkSentenceID),
+        ItemSelect,
+        success,
+        fail,
+        cancel,
+      };
+    }
+    case 'RPG.GameCore.WaitPhotoGraphResult': {
+      const { OnSuccess } = Task;
+      const success = parseTaskList(OnSuccess, context);
+      return {
+        type: 'WaitPhotoGraphResult',
+        success,
+      };
+    }
+    case 'RPG.GameCore.SelectorConfig': {
+      const { TaskList } = Task;
+      const callback = parseTaskList(TaskList, context);
+      return {
+        type: 'RandomConfig',
+        callback,
+      };
+    }
+    case 'RPG.GameCore.ShowEnvBuffDialog': {
+      const { OnCancel } = Task;
+      const cancel = parseTaskList(OnCancel, context);
+      return {
+        type: 'ShowEnvBuffDialog',
+        cancel,
+      };
+    }
+    case 'RPG.GameCore.BattlePlayTalk': {
+      const { TalkList } = Task;
+      const speakings = TalkList.map(({ TalkSentenceID }) => tt(TalkSentenceID));
+      return {
+        type: 'BattlePlayTalk',
+        speakings,
+      };
+    }
+    case 'RPG.GameCore.PlayNPCBubbleTalk': {
+      // ignore
+      const { BubbleTalkInfoList } = Task;
+      const speakings = BubbleTalkInfoList.map(({ TalkSentenceID }) => tt(TalkSentenceID));
+      return;
+    }
     default: {
       // console.warn('Unknown Task', JSON.stringify(Task, undefined, 2));
       restTaskType.add(type);
       if (/TalkSentenceID/.test(JSON.stringify(Task, undefined, 2))) {
         return { type: 'ImportantUnhandledTask', Task };
       }
+      return Task;
       break;
     }
-    /*
-    case 'RPG.GameCore.SwitchCharacterAnchor':
-    case 'RPG.GameCore.LevelPerformanceInitialize':
-    case 'RPG.GameCore.EndPerformance':
-    case 'RPG.GameCore.WaitPerformanceEnd':
-    case 'RPG.GameCore.FinishLevelGraph':
-    case 'RPG.GameCore.LockPlayerControl':
-    case 'RPG.GameCore.DestroyProp':
-    case 'RPG.GameCore.PropTriggerAnimState':
-    case 'RPG.GameCore.WaitSecond':
-    case 'RPG.GameCore.AnimSetParameter':
-    case 'RPG.GameCore.CreateNPCMonster':
-    case 'RPG.GameCore.SetAudioEmotionState':
-    case 'RPG.GameCore.UnLockPlayerControl':
-    case 'RPG.GameCore.CreateProp':
-    case 'RPG.GameCore.AdvEnablePropDialogMode':
-    case 'RPG.GameCore.CreateNPC':
-    case 'RPG.GameCore.CaptureLocalPlayer':
-    case 'RPG.GameCore.CharacterTriggerAnimState':
-    case 'RPG.GameCore.EnterMap':
-    case 'RPG.GameCore.PropReqInteract':
-    case 'RPG.GameCore.EnableNPCMonsterAI':
-    case 'RPG.GameCore.EnablePerformanceMode':
-    case 'RPG.GameCore.BlockInputController':
-    case 'RPG.GameCore.DestroyNPC':
-    case 'RPG.GameCore.ActiveVirtualCamera':
-    case 'RPG.GameCore.AdventureCameraLookAt':
-    case 'RPG.GameCore.CaptureNPCToCharacter':
-    case 'RPG.GameCore.CharacterTriggerFreeStyle':
-    case 'RPG.GameCore.SetHLODSwitchDelay':
-    case 'RPG.GameCore.AddStreamingSource':
-    case 'RPG.GameCore.TriggerEffect':
-    case 'RPG.GameCore.RemoveEffect':
-    case 'RPG.GameCore.RemoveStreamingSource':
-    case 'RPG.GameCore.CacheUI':
-    case 'RPG.GameCore.ReleaseCacheUI':
-    case 'RPG.GameCore.WaitSimpleTalkFinish':
-    case 'RPG.GameCore.AdvEntityFaceTo':
-    case 'RPG.GameCore.ShowTalkUI':
-    case 'RPG.GameCore.AdvNpcFaceToPlayer':
-    case 'RPG.GameCore.CharacterHeadLookAt':
-    case 'RPG.GameCore.ClearTalkUI':
-    case 'RPG.GameCore.CollectDataConditions':
-    case 'RPG.GameCore.PropMoveTo': {
-      // ignored
-    }
-    */
   }
 }
 
