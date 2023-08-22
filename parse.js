@@ -37,13 +37,13 @@ const tt = (tk, checked = 1) => {
   if (+tk === 812322815) {
     // console.log(Error('있는데?').stack);
   }
+  if (checked) {
+    talkUsedMap[tk] = 1; // check as used
+  }
   if (!TalkSentenceConfig[tk]) {
     return { TalkSentenceID: tk };
   }
   const { TextmapTalkSentenceName: name, TalkSentenceText: text } = TalkSentenceConfig[tk];
-  if (checked) {
-    talkUsedMap[tk] = 1; // check as used
-  }
   return { TalkSentenceID: tk, name: t(name), text: t(text) };
 }
 const getGroupTalkKeys = groupId => TalkSentenceConfigKeys.filter(key => key.startsWith(groupId) && key.length === 9);
@@ -187,10 +187,10 @@ function handleGroupedMissions(missionGroupId, missionIds) {
   const map = {};
   const sortedSubMissionList = [];
   let count = 0;
-  let successSorting = true;
   // FIXME: 이상한 소팅임
   // A -> B 가 있으니 트리를 만든다음 거꾸로 나가면 됨
   // 고리가 있는 경우 먼저 나온 애 순서로
+  let successSorting = true;
   while (list.length > 0) {
     count += 1;
     const SubMission = list.shift();
@@ -228,9 +228,7 @@ function handleGroupedMissions(missionGroupId, missionIds) {
       const MissionJson = readJsonFile(normalizePath(MissionJsonPath));
 
       const dialog = parseSequenceObject(MissionJson, context);
-      if (dialog.length) {
-        dialogs.push({ SubMissionID: ID, dialog });
-      }
+      dialogs.push({ SubMissionID: ID, dialog });
     } catch (err) {
       console.error(err);
     }
@@ -511,10 +509,10 @@ function parseTask(Task, context = {}) {
     }
     case 'RPG.GameCore.PropSetupUITrigger': {
       const { ButtonCallback } = Task;
-      const returns = parseTaskList(ButtonCallback, context);
+      const callback = parseTaskList(ButtonCallback, context);
       return {
         type: 'PropSetupUITrigger',
-        returns,
+        callback,
       };
     }
     case 'RPG.GameCore.TriggerCustomStringOnDialogEnd':
@@ -629,11 +627,39 @@ function parseTask(Task, context = {}) {
         speaking: tt(TalkSentenceID),
       };
     }
+    case 'RPG.GameCore.PropSetupTrigger': { // 장소 이동 활성화
+      const { OnTriggerEnter } = Task;
+      const callback = parseTaskList(OnTriggerEnter, context);
+      return {
+        type: 'PropSetupTrigger',
+        callback,
+      };
+    }
+    case 'RPG.GameCore.RandomConfig': {
+      const { TaskList } = Task;
+      const callback = parseTaskList(TaskList, context);
+      return {
+        type: 'RandomConfig',
+        callback,
+      };
+    }
+    case 'RPG.GameCore.PropStateExecute': {
+      const { Execute } = Task;
+      const callback = parseTaskList(Execute, context);
+      return {
+        type: 'PropStateExecute',
+        callback,
+      };
+    }
     default: {
       // console.warn('Unknown Task', JSON.stringify(Task, undefined, 2));
       restTaskType.add(type);
+      if (/TalkSentenceID/.test(JSON.stringify(Task, undefined, 2))) {
+        return { type: 'ImportantUnhandledTask', Task };
+      }
       break;
     }
+    /*
     case 'RPG.GameCore.SwitchCharacterAnchor':
     case 'RPG.GameCore.LevelPerformanceInitialize':
     case 'RPG.GameCore.EndPerformance':
@@ -645,7 +671,6 @@ function parseTask(Task, context = {}) {
     case 'RPG.GameCore.WaitSecond':
     case 'RPG.GameCore.AnimSetParameter':
     case 'RPG.GameCore.CreateNPCMonster':
-    case 'RPG.GameCore.PropSetupTrigger':
     case 'RPG.GameCore.SetAudioEmotionState':
     case 'RPG.GameCore.UnLockPlayerControl':
     case 'RPG.GameCore.CreateProp':
@@ -671,17 +696,16 @@ function parseTask(Task, context = {}) {
     case 'RPG.GameCore.CacheUI':
     case 'RPG.GameCore.ReleaseCacheUI':
     case 'RPG.GameCore.WaitSimpleTalkFinish':
-    case 'RPG.GameCore.PropStateExecute':
     case 'RPG.GameCore.AdvEntityFaceTo':
     case 'RPG.GameCore.ShowTalkUI':
     case 'RPG.GameCore.AdvNpcFaceToPlayer':
     case 'RPG.GameCore.CharacterHeadLookAt':
     case 'RPG.GameCore.ClearTalkUI':
     case 'RPG.GameCore.CollectDataConditions':
-    case 'RPG.GameCore.RandomConfig':
     case 'RPG.GameCore.PropMoveTo': {
       // ignored
     }
+    */
   }
 }
 
