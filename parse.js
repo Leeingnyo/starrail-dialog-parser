@@ -33,18 +33,24 @@ const TextMap = readJsonFile(normalizePath('TextMap/TextMapKR.json'));
 const talkUsedMap = {};
 const TalkSentenceConfigKeys = Object.keys(TalkSentenceConfig);
 const t = hash => TextMap[hash?.Hash ?? hash]; // hash
-const tt = tk => {
+const tt = (tk, checked = 1) => {
+  if (+tk === 812322815) {
+    // console.log(Error('있는데?').stack);
+  }
   if (!TalkSentenceConfig[tk]) {
     return { TalkSentenceID: tk };
   }
   const { TextmapTalkSentenceName: name, TalkSentenceText: text } = TalkSentenceConfig[tk];
-  talkUsedMap[tk] = 1; // check as used
+  if (checked) {
+    talkUsedMap[tk] = 1; // check as used
+  }
   return { TalkSentenceID: tk, name: t(name), text: t(text) };
 }
 const getGroupTalkKeys = groupId => TalkSentenceConfigKeys.filter(key => key.startsWith(groupId) && key.length === 9);
 
 // utils
 const toJsonString = obj => JSON.stringify(obj, undefined, 2);
+const removeDup = iter => [...new Set(iter)];
 const getGroupId = ids => {
   const xor = Array.from(Array(9).keys())
     .find(i =>
@@ -210,6 +216,8 @@ function handleGroupedMissions(missionGroupId, missionIds) {
     }
   }
 
+  const totalDialogs = [];
+
   const dialogs = [];
   (successSorting ? sortedSubMissionList : SubMissionListInGroupedMission).forEach(SubMission => {
     const { ID, MissionJsonPath } = SubMission;
@@ -229,6 +237,7 @@ function handleGroupedMissions(missionGroupId, missionIds) {
   });
   console.log('--------------- MainMission Dialog ---------');
   console.log(toJsonString(dialogs));
+  totalDialogs.push(dialogs);
 
   const others = [
     { name: 'drop', getPath: getDropsDirPath },
@@ -259,6 +268,32 @@ function handleGroupedMissions(missionGroupId, missionIds) {
     });
     console.log(`--------------- ${name[0].toUpperCase()}${name.slice(1)} Dialog ---------`);
     console.log(toJsonString(dialogs));
+    totalDialogs.push(dialogs);
+  });
+
+  // 남은 것 중 그룹이 같은 걸 찾아보기
+  const ids = removeDup(totalDialogs.flatMap(_ => _).flatMap(({ dialog }) => {
+    return [...JSON.stringify(dialog, undefined, 2).matchAll(/"TalkSentenceID": (\d+),/g)]
+      .map(matched => matched[1]);
+  }));
+  const groupIds = removeDup(ids.map(id => Math.floor(id / Math.pow(10, 2)).toString()));
+  const groupedMissingKeys = groupIds.flatMap(groupId => {
+    const TalkSentenceIDs = getGroupTalkKeys(groupId).filter(key => !talkUsedMap?.[key]);
+    if (!TalkSentenceIDs.length) return [];
+    return [{
+      groupId,
+      TalkSentenceIDs
+    }];
+  });
+
+  // TODO: Config/Level/NPCDialogue Config/Level/PropDialogue 를 추가로 봐야함
+  // 여기에 물건을 누르든지 NPC 에게 말을 거는 거든지 하는 게 있음
+  console.log(`--------------- Related Missing Dialog ---------`);
+  groupedMissingKeys.forEach(({ groupId, TalkSentenceIDs }) => {
+    console.log('groupId', groupId);
+    TalkSentenceIDs.forEach(TalkSentenceID => {
+    console.log('- Talk', TalkSentenceID, tt(TalkSentenceID));
+    });
   });
 }
 
@@ -586,6 +621,14 @@ function parseTask(Task, context = {}) {
         failed: FailedTaskList ? parseTaskList(FailedTaskList, context) : [],
       };
     }
+    case 'RPG.GameCore.PerformanceTransition':
+    case 'RPG.GameCore.PlayScreenTransfer': { // 검은 화면 텍스트
+      const { TalkSentenceID } = Task;
+      return {
+        type: 'PlayScreenTransfer',
+        speaking: tt(TalkSentenceID),
+      };
+    }
     default: {
       // console.warn('Unknown Task', JSON.stringify(Task, undefined, 2));
       restTaskType.add(type);
@@ -599,13 +642,11 @@ function parseTask(Task, context = {}) {
     case 'RPG.GameCore.LockPlayerControl':
     case 'RPG.GameCore.DestroyProp':
     case 'RPG.GameCore.PropTriggerAnimState':
-    case 'RPG.GameCore.PerformanceTransition':
     case 'RPG.GameCore.WaitSecond':
     case 'RPG.GameCore.AnimSetParameter':
     case 'RPG.GameCore.CreateNPCMonster':
     case 'RPG.GameCore.PropSetupTrigger':
     case 'RPG.GameCore.SetAudioEmotionState':
-    case 'RPG.GameCore.PlayScreenTransfer':
     case 'RPG.GameCore.UnLockPlayerControl':
     case 'RPG.GameCore.CreateProp':
     case 'RPG.GameCore.AdvEnablePropDialogMode':
