@@ -27,7 +27,7 @@ const tt = tk => {
   }
   const { TextmapTalkSentenceName: name, TalkSentenceText: text } = TalkSentenceConfig[tk];
   talkUsedMap[tk] = 1;
-  return { name: t(name), text: t(text) };
+  return { TalkSentenceID: tk, name: t(name), text: t(text) };
 }
 const getGroupTalkKeys = groupId => TalkSentenceConfigKeys.filter(key => key.startsWith(groupId) && key.length === 9);
 
@@ -79,6 +79,7 @@ const list = [...SubMissionList];
 const map = {};
 const sortedSubMissionList = [];
 let count = 0;
+let successSorting = true;
 while (list.length > 0) {
   count += 1;
   const SubMission = list.shift();
@@ -99,22 +100,27 @@ while (list.length > 0) {
     console.log('------------');
     console.log('Sorting SubMissionList Failed:', key);
     console.log('------------');
+    successSorting = false;
     break;
   }
 }
 
 const dialogs = [];
 
-sortedSubMissionList.forEach(SubMission => {
+(successSorting ? sortedSubMissionList : SubMissionList).forEach(SubMission => {
   const { ID, MissionJsonPath } = SubMission;
   if (!MissionJsonPath) {
     return;
   }
-  const MissionJson = readJsonFile(rp(MissionJsonPath));
+  try {
+    const MissionJson = readJsonFile(rp(MissionJsonPath));
 
-  const dialog = parseSequenceObject(MissionJson);
-  if (dialog.length) {
-    dialogs.push({ ID, dialog });
+    const dialog = parseSequenceObject(MissionJson);
+    if (dialog.length) {
+      dialogs.push({ ID, dialog });
+    }
+  } catch (err) {
+    console.error(err);
   }
 });
 
@@ -125,16 +131,20 @@ console.log(
 
 // Items
 const TalksDirPath = getTalksDirPath(key)
-if (fs.existsSync(TalksDirPath)) {
+if (fs.existsSync(rp(TalksDirPath))) {
   const others = [];
 
-  const list = fs.readdirSync(TalksDirPath);
+  const list = fs.readdirSync(rp(TalksDirPath));
   list.map(filename => `${TalksDirPath}${sep}${filename}`).forEach(talkPath => {
-    const talkJson = readJsonFile(rp(talkPath));
+    try {
+      const talkJson = readJsonFile(rp(talkPath));
 
-    const dialog = parseSequenceObject(talkJson);
-    if (dialog.length) {
-      others.push({ dialog });
+      const dialog = parseSequenceObject(talkJson);
+      if (dialog.length) {
+        others.push({ dialog });
+      }
+    } catch (err) {
+      console.error(err);
     }
   });
 
@@ -146,16 +156,20 @@ if (fs.existsSync(TalksDirPath)) {
 
 // Acts
 const ActsDirPath = getActsDirPath(key)
-if (fs.existsSync(ActsDirPath)) {
+if (fs.existsSync(rp(ActsDirPath))) {
   const others = [];
 
-  const list = fs.readdirSync(ActsDirPath);
+  const list = fs.readdirSync(rp(ActsDirPath));
   list.map(filename => `${ActsDirPath}${sep}${filename}`).filter(s => !checkPerformanceRead[s]).forEach(actPath => {
-    const actJson = readJsonFile(rp(actPath));
+    try {
+      const actJson = readJsonFile(rp(actPath));
 
-    const dialog = parseSequenceObject(actJson);
-    if (dialog.length) {
-      others.push({ dialog });
+      const dialog = parseSequenceObject(actJson);
+      if (dialog.length) {
+        others.push({ dialog });
+      }
+    } catch (err) {
+      console.error(err);
     }
   });
 
@@ -183,7 +197,7 @@ function parseSequenceObject({ OnInitSequece, OnStartSequece }) {
   return dialog;
 }
 
-function parseTaskList(TaskList) {
+function parseTaskList(TaskList = []) {
   return TaskList.map(Task => parseTask(Task)).filter(s => s);
 }
 
@@ -200,160 +214,165 @@ function parseTask(Task) {
         return;
       }
       const { PerformancePath } = performanceMap[PerformanceType][PerformanceID];
-      const Performance = readJsonFile(rp(PerformancePath));
+      try {
+        const Performance = readJsonFile(rp(PerformancePath));
 
-      checkPerformanceRead[PerformancePath] = 1; // check as read
+        checkPerformanceRead[PerformancePath] = 1; // check as read
 
-      switch (PerformanceType) {
-        case 'PlayVideo': {
-          return {
-            type: 'TriggerPerformance',
-            PerformanceType,
-            content: parseSequenceObject(Performance),
-          };
-        }
-        case 'A': { // 자막 붙는 컷씬
-          return {
-            type: 'TriggerPerformance',
-            PerformanceType,
-            content: parseSequenceObject(Performance),
-          };
-        }
-        case 'D': { // 심플 토크
-          return {
-            type: 'TriggerPerformance',
-            PerformanceType,
-            content: parseSequenceObject(Performance),
-          };
-        }
-        case 'C': { // 인게임 컷씬 (나쁜 것)
-          const parsed = parseSequenceObject(Performance);
-          const flattened = parsed.flatMap(_ => _);
-          const options = flattened.filter(obj => obj.type === 'PlayOptionTalk');
-
-          // 만약 옵션 텍스트가 살아있다면 고칠 수도 있지 않을까?
-          if (options.length === 0) {
-            console.warn('복구 불가', flattened);
+        switch (PerformanceType) {
+          case 'PlayVideo': {
             return {
               type: 'TriggerPerformance',
               PerformanceType,
-              content: parsed,
+              content: parseSequenceObject(Performance),
             };
           }
+          case 'A': { // 자막 붙는 컷씬
+            return {
+              type: 'TriggerPerformance',
+              PerformanceType,
+              content: parseSequenceObject(Performance),
+            };
+          }
+          case 'D': { // 심플 토크
+            return {
+              type: 'TriggerPerformance',
+              PerformanceType,
+              content: parseSequenceObject(Performance),
+            };
+          }
+          case 'C': { // 인게임 컷씬 (나쁜 것)
+            const parsed = parseSequenceObject(Performance);
+            const flattened = parsed.flatMap(_ => _);
+            const options = flattened.filter(obj => obj.type === 'PlayOptionTalk');
 
-          const ids = options.flatMap(({ list }) => list.map(({ TalkSentenceID }) => TalkSentenceID)); // number[]
-          const groupId = getGroupId(ids).toString();
-          const missing = 9 - groupId.length;
+            // 만약 옵션 텍스트가 살아있다면 고칠 수도 있지 않을까?
+            if (options.length === 0) {
+              console.warn('복구 불가', flattened);
+              return {
+                type: 'TriggerPerformance',
+                PerformanceType,
+                content: parsed,
+              };
+            }
 
-          const missingRestTalkKeys = getGroupTalkKeys(groupId);
-          const missingRestTalks = missingRestTalkKeys.filter(key => !talkUsedMap[key]).map(key => ({ key, text: tt(key) }));
+            const ids = options.flatMap(({ list }) => list.map(({ TalkSentenceID }) => TalkSentenceID)); // number[]
+            const groupId = getGroupId(ids).toString();
+            const missing = 9 - groupId.length;
 
-          /* 구데기 코드 시작 */
-          const getMissingsBetween = (min, max) => missingRestTalks.filter(({ key }) => min <= key && (max === undefined || key < max));
-          const getId = d => d.replace('TalkSentence_', '')
+            const missingRestTalkKeys = getGroupTalkKeys(groupId);
+            const missingRestTalks = missingRestTalkKeys.filter(key => !talkUsedMap[key]).map(key => ({ key, text: tt(key) }));
 
-                  const parseParsed = (parsed) => {
-                    // context
-                    const results = []; 
-                    const sor = missingRestTalks.map(({ key }) => key).sort();
-                    let from = sor[0];
-                    let to = null;
-                    let options = null;
-                    let sortedOptions = null;
-                    let maxOptions = null;
-                    let optionCounts = 0;
+            /* 구데기 코드 시작 */
+            const getMissingsBetween = (min, max) => missingRestTalks.filter(({ key }) => min <= key && (max === undefined || key < max));
+            const getId = d => d.replace('TalkSentence_', '')
 
-                    // 'Initial', 'ComplexTalk', 'PlayOptionTalk', 'WaitCustomString', 'TriggerCustomString', 'End'
-                    let status = 'Initial';
+                    const parseParsed = (parsed) => {
+                      // context
+                      const results = []; 
+                      const sor = missingRestTalks.map(({ key }) => key).sort();
+                      let from = sor[0];
+                      let to = null;
+                      let options = null;
+                      let sortedOptions = null;
+                      let maxOptions = null;
+                      let optionCounts = 0;
 
-                    // console.log('시작');
-                    const flatten = parsed.flatMap(_ => _);
-                    for (const element of flatten) {
-                      switch (element.type) {
-                        case 'PlayOptionTalk': {
-                          // console.log('옵션이다');
-                          sortedOptions = element.list.map(({ TalkSentenceID }) => TalkSentenceID).sort();
-                          to = sortedOptions[0];
-                          maxOptions = sortedOptions.at(-1);
-                          // console.log(from, '에서부터 ', to, '까지 넣는다');
-                          const mis = getMissingsBetween(from, to);
-                          if (mis.length) {
-                            results.push(mis);
-                          }
-                          // console.log('옵션 객체를 만든다');
-                          options = element.list.reduce((map, { TalkSentenceID, text, isContinue }) => ({
-                            ...map,
-                            [TalkSentenceID]: [{ key: TalkSentenceID, text, isContinue }],
-                          }), {});
-                          optionCounts = element.list.length;
-                          break;
-                        }
-                        case 'WaitCustomString': {
-                          from = getId(element.value);
-                          // console.log(from, '부터');
-                          break;
-                        }
-                        case 'ComplexTalk': { break; }
-                        case 'TriggerCustomString': {
-                          if (optionCounts === 0) {
-                            // console.log('뭔가 이상함');
-                            return;
-                          }
-                          optionCounts -= 1;
-                          to = getId(element.value);
-                          // set options
-                          sortedOptions.filter(op => op > from);
-                          const myTo = sortedOptions.find(op => op < to && op > from) ?? to;
-                          // console.log(myTo, '까지');
-                          const mis = getMissingsBetween(from, myTo);
-                          if (mis.length) {
-                            try {
-                              options[from].push(...mis);
-                            } catch (err) {
-                              const optionKeys = Object.keys(options);
-                              options[optionKeys[0]].push(...mis);
-                              // FIXME: 코드 망했음
-                              // 분기가 없는 경우같은 게 있는 것 같음
+                      // 'Initial', 'ComplexTalk', 'PlayOptionTalk', 'WaitCustomString', 'TriggerCustomString', 'End'
+                      let status = 'Initial';
+
+                      // console.log('시작');
+                      const flatten = parsed.flatMap(_ => _);
+                      for (const element of flatten) {
+                        switch (element.type) {
+                          case 'PlayOptionTalk': {
+                            // console.log('옵션이다');
+                            sortedOptions = element.list.map(({ TalkSentenceID }) => TalkSentenceID).sort();
+                            to = sortedOptions[0];
+                            maxOptions = sortedOptions.at(-1);
+                            // console.log(from, '에서부터 ', to, '까지 넣는다');
+                            const mis = getMissingsBetween(from, to);
+                            if (mis.length) {
+                              results.push(mis);
                             }
+                            // console.log('옵션 객체를 만든다');
+                            options = element.list.reduce((map, { TalkSentenceID, text, isContinue }) => ({
+                              ...map,
+                              [TalkSentenceID]: [{ key: TalkSentenceID, text, isContinue }],
+                            }), {});
+                            optionCounts = element.list.length;
+                            break;
                           }
-                          if (optionCounts === 0) {
-                            // push options
-                            results.push(options);
-                            options = null;
+                          case 'WaitCustomString': {
+                            from = getId(element.value);
+                            // console.log(from, '부터');
+                            break;
                           }
-                          break;
+                          case 'ComplexTalk': { break; }
+                          case 'TriggerCustomString': {
+                            if (optionCounts === 0) {
+                              // console.log('뭔가 이상함');
+                              return;
+                            }
+                            optionCounts -= 1;
+                            to = getId(element.value);
+                            // set options
+                            sortedOptions.filter(op => op > from);
+                            const myTo = sortedOptions.find(op => op < to && op > from) ?? to;
+                            // console.log(myTo, '까지');
+                            const mis = getMissingsBetween(from, myTo);
+                            if (mis.length) {
+                              try {
+                                options[from].push(...mis);
+                              } catch (err) {
+                                const optionKeys = Object.keys(options);
+                                options[optionKeys[0]].push(...mis);
+                                // FIXME: 코드 망했음
+                                // 분기가 없는 경우같은 게 있는 것 같음
+                              }
+                            }
+                            if (optionCounts === 0) {
+                              // push options
+                              results.push(options);
+                              options = null;
+                            }
+                            break;
+                          }
                         }
+                        status = element.type;
                       }
-                      status = element.type;
-                    }
-                    if (status === 'ComplexTalk') {
-                      const myFrom = Math.max(maxOptions.toString(), to.toString())
-                      // to 를 당겨서 끝까지를 추가
-                      results.push(options);
-                      results.push(getMissingsBetween(myFrom));
-                    }
+                      if (status === 'ComplexTalk') {
+                        const myFrom = Math.max(maxOptions.toString(), to.toString())
+                        // to 를 당겨서 끝까지를 추가
+                        results.push(options);
+                        results.push(getMissingsBetween(myFrom));
+                      }
 
-                    return results;
-                  }
-          /* 구데기 코드 끝 */
+                      return results;
+                    }
+            /* 구데기 코드 끝 */
 
-          return {
-            type: 'TriggerPerformance',
-            PerformanceType,
-            content: parseParsed(parsed),
-          };
+            return {
+              type: 'TriggerPerformance',
+              PerformanceType,
+              content: parseParsed(parsed),
+            };
+          }
+          case 'E': { // 얘넨 뭐지
+            return {
+              type: 'TriggerPerformance',
+              PerformanceType,
+              content: parseSequenceObject(Performance),
+            };
+          }
+          default: {
+            // console.warn('Unknown PerformanceType', PerformanceType, Task);
+            break;
+          }
         }
-        case 'E': { // 얘넨 뭐지
-          return {
-            type: 'TriggerPerformance',
-            PerformanceType,
-            content: parseSequenceObject(Performance),
-          };
-        }
-        default: {
-          // console.warn('Unknown PerformanceType', PerformanceType, Task);
-          break;
-        }
+      } catch (err) {
+        console.error(err);
+        return;
       }
       break;
     }
@@ -370,14 +389,19 @@ function parseTask(Task) {
           captions: [],
         };
       }
-      const Caption = readJsonFile(rp(CaptionPath));
-      const { CaptionList } = Caption;
-      const captions = CaptionList.map(({ CaptionTextID }) => t(CaptionTextID));
-      return {
-        type: 'PlayVideo',
-        VideoID,
-        captions,
-      };
+      try {
+        const Caption = readJsonFile(rp(CaptionPath));
+        const { CaptionList } = Caption;
+        const captions = CaptionList.map(({ CaptionTextID }) => t(CaptionTextID));
+        return {
+          type: 'PlayVideo',
+          VideoID,
+          captions,
+        };
+      } catch (err) {
+        console.error(err);
+        return;
+      }
     }
     case 'RPG.GameCore.TriggerBattle': {
       // 누구 누구랑 싸우는지 나옴
@@ -409,6 +433,9 @@ function parseTask(Task) {
       };
     }
     case 'RPG.GameCore.WaitCustomString': {
+      if (!Task.CustomString) {
+        return;
+      }
       const { CustomString: { Value } } = Task;
       return {
         type: 'WaitCustomString',
@@ -431,14 +458,19 @@ function parseTask(Task) {
               name: CutSceneName,
             };
           }
-          const Caption = readJsonFile(rp(CaptionPath));
-          const { CaptionList } = Caption;
-          const captions = CaptionList.map(({ CaptionTextID }) => t(CaptionTextID));
-          return {
-            type: 'Cutscene',
-            captions,
-            name: CutSceneName,
-          };
+          try {
+            const Caption = readJsonFile(rp(CaptionPath));
+            const { CaptionList } = Caption;
+            const captions = CaptionList.map(({ CaptionTextID }) => t(CaptionTextID));
+            return {
+              type: 'Cutscene',
+              captions,
+              name: CutSceneName,
+            };
+          } catch (err) {
+            console.error(err);
+            return;
+          }
         }
         default: {
           // console.log(Task);
@@ -554,5 +586,5 @@ function parseTask(Task) {
 
 console.log('-------------');
 console.log('resetTaskType');
-console.log([...restTaskType]);
+console.log(JSON.stringify([...restTaskType], undefined, 2));
 console.log('-------------');
