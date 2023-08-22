@@ -51,6 +51,7 @@ const getGroupId = ids => {
     );
   return Math.floor(ids[0] / Math.pow(10, xor));
 };
+const getTalkSentenceId = d => d.replace('TalkSentence_', '')
 
 // global variables
 const restTaskType = new Set();
@@ -63,7 +64,9 @@ const context = { checkPerformanceRead, talkUsedMap, restTaskType };
 
 // start to parse
 const keys = Object.keys(mainMissionMap);
-let givenKeys = ['1000101']; // TODO: 조절 혹은 arguments
+// TODO: 조절 혹은 arguments
+// const givenKeys = ['1000101'];
+const givenKeys = [];
 
 (givenKeys.length ? givenKeys : keys).forEach(key => {
   console.log('========================================================================');
@@ -183,28 +186,53 @@ let givenKeys = ['1000101']; // TODO: 조절 혹은 arguments
 /**
  * SequenceObject::
  * MissionJson, Performance
- * @returns DialogSequence
+ * @returns DialogSequence = { taskListIndex: number; taskList: ParsedTask[] }[]
  */
 function parseSequenceObject({ OnInitSequece, OnStartSequece }, context) {
   const dialog = [];
-  OnStartSequece.forEach(Sequence => {
-    const parsed = parseTaskList(Sequence.TaskList, context);
-    if (parsed.length) {
-      dialog.push(parsed);
+  OnStartSequece.forEach((Sequence, index) => {
+    const taskList = parseTaskList(Sequence.TaskList, context);
+    if (taskList.length) {
+      dialog.push({ taskListIndex: index, taskList });
     }
   });
   return dialog;
 }
 
+/**
+ * @returns ParsedTask[]
+ * undefined 등 불순물 없음
+ */
 function parseTaskList(TaskList = [], context) {
   return TaskList.map(Task => parseTask(Task, context)).filter(s => s);
 }
 
+/**
+ * @types Talk { TalkSentenceID: string | number; name: string; text: string }
+ */
+
 /*
- * context 
+ * context
  * - checkPerformanceRead
  * - talkUsedMap
  * - restTaskType
+ *
+ * @returns ParsedTask = { type: string }
+ * | { type: 'TriggerPerformance'; PerformanceType: 'PlayVideo' | 'A' | 'D' | 'C' 'E'; content: DialogSequence }
+ * | { type: 'PlayVideo'; VideoID: string; captions: string[] }
+ * | { type: 'PlayMissionTalk'; speakings: Talk[] }
+ * | { type: 'PropSetupUITrigger'; returns: ParsedTask[] }
+ * | { type: 'TriggerCustomString'; value: string }
+ * | { type: 'WaitCustomString'; value: string }
+ * | { type: 'PlayTimeline-Cutscene'; captions: string[], name: string }
+ * | { type: 'PlayTimeline-ComplexTalk'; name: string }
+ * | { type: 'PlayTimeline-ComplexTalk-Recovered'; name: string; speakings: Talk[] }
+ * | { type: 'PlaySimpleTalk'; speakings: Talk[] }
+ * | { type: 'PlayOptionTalk'; list: { TalkSentenceID: string; isContinue: boolean; text: Talk }[] }
+ * | { type: 'PlayAndWaitSimpleTalk'; speakings: Talk[] }
+ * | { type: 'PlayMessage'; MessageSectionID: string }
+ * | { type: 'PredicateTaskList'; Predicate: unknown; success: ParsedTask[]; failed: ParsedTask[] }
+ * |
  */
 function parseTask(Task, context = {}) {
   const { $type: type } = Task;
@@ -250,120 +278,43 @@ function parseTask(Task, context = {}) {
             };
           }
           case 'C': { // 인게임 컷씬 (나쁜 것)
-            const parsed = parseSequenceObject(Performance, context);
-            const flattened = parsed.flatMap(_ => _);
-            const options = flattened.filter(obj => obj.type === 'PlayOptionTalk');
+            // PerformanceC 의 경우 playable 이란 asset 으로
+            // 카메라 시점, 캐릭터의 애니메이션 등과 함께 대사 등이 들어있어서
+            // json 만으로 대사를 추출해내기 어렵다
+            //
+            // 그러나 어느 performance 안의 playable 사이에
+            // 플레이어가 선택지를 고를 수 있는 옵션이 있는 경우가 있다
+            // 옵션에는 옵션의 텍스트 ID가 있고, 텍스트 ID 는 연속된 경우가 많으니
+            // 이를 이용하여 옵션 앞 뒤의 playable 의 텍스트를 고칠 수도 있지 않을까?
+            const parsedSequenceObject/** DialogSequence */ = parseSequenceObject(Performance, context);
+            const optionTasks/** ParsedTask[] */ =
+              parsedSequenceObject.map(({ taskList }) => taskList).flatMap(_ => _).filter(obj => obj.type === 'PlayOptionTalk');
 
-            // 만약 옵션 텍스트가 살아있다면 고칠 수도 있지 않을까?
-            if (options.length === 0) {
-              console.warn('복구 불가', flattened);
+            // PlayOptionTalk Task 가 있는지 확인
+            if (optionTasks.length === 0) {
+              // 없으면 복구 불가 판정
+              console.warn('복구 불가', JSON.stringify(parsedSequenceObject, undefined, 2));
+              // 그러나
+              // 복구된 playable 가 있고, 그 앞 뒤의 playable 인 경우엔 또 복구할 여지가 있음
+              // TODO: 미구현
               return {
                 type: 'TriggerPerformance',
                 PerformanceType,
-                content: parsed,
+                content: parsedSequenceObject,
               };
             }
 
-            const ids = options.flatMap(({ list }) => list.map(({ TalkSentenceID }) => TalkSentenceID)); // number[]
+            const ids = optionTasks.flatMap(({ list }) => list.map(({ TalkSentenceID }) => TalkSentenceID)); // number[]
             const groupId = getGroupId(ids).toString();
             const missing = 9 - groupId.length;
 
             const missingRestTalkKeys = getGroupTalkKeys(groupId);
             const missingRestTalks = missingRestTalkKeys.filter(key => !talkUsedMap?.[key]).map(key => ({ key, text: tt(key) }));
 
-            /* 구데기 코드 시작 */
-            const getMissingsBetween = (min, max) => missingRestTalks.filter(({ key }) => min <= key && (max === undefined || key < max));
-            const getId = d => d.replace('TalkSentence_', '')
-
-                    const parseParsed = (parsed) => {
-                      // context
-                      const results = []; 
-                      const sor = missingRestTalks.map(({ key }) => key).sort();
-                      let from = sor[0];
-                      let to = null;
-                      let options = null;
-                      let sortedOptions = null;
-                      let maxOptions = null;
-                      let optionCounts = 0;
-
-                      // 'Initial', 'ComplexTalk', 'PlayOptionTalk', 'WaitCustomString', 'TriggerCustomString', 'End'
-                      let status = 'Initial';
-
-                      // console.log('시작');
-                      const flatten = parsed.flatMap(_ => _);
-                      for (const element of flatten) {
-                        switch (element.type) {
-                          case 'PlayOptionTalk': {
-                            // console.log('옵션이다');
-                            sortedOptions = element.list.map(({ TalkSentenceID }) => TalkSentenceID).sort();
-                            to = sortedOptions[0];
-                            maxOptions = sortedOptions.at(-1);
-                            // console.log(from, '에서부터 ', to, '까지 넣는다');
-                            const mis = getMissingsBetween(from, to);
-                            if (mis.length) {
-                              results.push(mis);
-                            }
-                            // console.log('옵션 객체를 만든다');
-                            options = element.list.reduce((map, { TalkSentenceID, text, isContinue }) => ({
-                              ...map,
-                              [TalkSentenceID]: [{ key: TalkSentenceID, text, isContinue }],
-                            }), {});
-                            optionCounts = element.list.length;
-                            break;
-                          }
-                          case 'WaitCustomString': {
-                            from = getId(element.value);
-                            // console.log(from, '부터');
-                            break;
-                          }
-                          case 'ComplexTalk': { break; }
-                          case 'TriggerCustomString': {
-                            if (optionCounts === 0) {
-                              // console.log('뭔가 이상함');
-                              return;
-                            }
-                            optionCounts -= 1;
-                            to = getId(element.value);
-                            // set options
-                            sortedOptions.filter(op => op > from);
-                            const myTo = sortedOptions.find(op => op < to && op > from) ?? to;
-                            // console.log(myTo, '까지');
-                            const mis = getMissingsBetween(from, myTo);
-                            if (mis.length) {
-                              try {
-                                options[from].push(...mis);
-                              } catch (err) {
-                                const optionKeys = Object.keys(options);
-                                options[optionKeys[0]].push(...mis);
-                                // FIXME: 코드 망했음
-                                // 분기가 없는 경우같은 게 있는 것 같음
-                              }
-                            }
-                            if (optionCounts === 0) {
-                              // push options
-                              results.push(options);
-                              options = null;
-                            }
-                            break;
-                          }
-                        }
-                        status = element.type;
-                      }
-                      if (status === 'ComplexTalk') {
-                        const myFrom = Math.max(maxOptions.toString(), to.toString())
-                        // to 를 당겨서 끝까지를 추가
-                        results.push(options);
-                        results.push(getMissingsBetween(myFrom));
-                      }
-
-                      return results;
-                    }
-            /* 구데기 코드 끝 */
-
             return {
               type: 'TriggerPerformance',
               PerformanceType,
-              content: parseParsed(parsed),
+              content: parsePerformanceWithOptions(parsedSequenceObject, missingRestTalks),
             };
           }
           case 'E': { // 얘넨 뭐지
@@ -426,7 +377,7 @@ function parseTask(Task, context = {}) {
       };
     }
     case 'RPG.GameCore.PropSetupUITrigger': {
-      const { ButtonCallback } = Task; 
+      const { ButtonCallback } = Task;
       const returns = parseTaskList(ButtonCallback, context);
       return {
         type: 'PropSetupUITrigger',
@@ -461,7 +412,7 @@ function parseTask(Task, context = {}) {
           const { CaptionPath, CutSceneName } = CutSceneConfig[TimelineName];
           if (!CaptionPath) {
             return {
-              type: 'Cutscene',
+              type: 'PlayTimeline-Cutscene',
               captions: [],
               name: CutSceneName,
             };
@@ -471,7 +422,7 @@ function parseTask(Task, context = {}) {
             const { CaptionList } = Caption;
             const captions = CaptionList.map(({ CaptionTextID }) => t(CaptionTextID));
             return {
-              type: 'Cutscene',
+              type: 'PlayTimeline-Cutscene',
               captions,
               name: CutSceneName,
             };
@@ -484,7 +435,7 @@ function parseTask(Task, context = {}) {
           // console.log(Task);
           // console.log('Unabled to parse timeline', TimelineName);
           return {
-            type: 'ComplexTalk',
+            type: 'PlayTimeline-ComplexTalk',
             name: TimelineName,
           };
         }
@@ -590,6 +541,97 @@ function parseTask(Task, context = {}) {
       // ignored
     }
   }
+}
+
+/**
+ * PlayTimeline-ComplexTalk 를 PlayTimeline-ComplexTalk-Recovered 로 복구하는 코드
+ * @params sequenceObject DialogSequence
+ * @returns DialogSequence
+ */
+function parsePerformanceWithOptions(sequenceObject, missingRestTalks) {
+  const getMissingsBetween = (min, max) =>
+    missingRestTalks.filter(({ key }) => min <= key && (max === undefined || key < max));
+  // context
+  const results = [];
+  const sor = missingRestTalks.map(({ key }) => key).sort();
+  let from = sor[0];
+  let to = null;
+  let options = null;
+  let sortedOptions = null;
+  let maxOptions = null;
+  let optionCounts = 0;
+
+  // 'Initial', 'PlayTimeline-ComplexTalk', 'PlayOptionTalk', 'WaitCustomString', 'TriggerCustomString', 'End'
+  let status = 'Initial';
+
+  // console.log('시작');
+  const flatten = sequenceObject.map(({ taskList }) => taskList).flatMap(_ => _);
+  for (const element of flatten) {
+    switch (element.type) {
+      case 'PlayOptionTalk': {
+        // console.log('옵션이다');
+        sortedOptions = element.list.map(({ TalkSentenceID }) => TalkSentenceID).sort();
+        to = sortedOptions[0];
+        maxOptions = sortedOptions.at(-1);
+        // console.log(from, '에서부터 ', to, '까지 넣는다');
+        const mis = getMissingsBetween(from, to);
+        if (mis.length) {
+          results.push(mis);
+        }
+        // console.log('옵션 객체를 만든다');
+        options = element.list.reduce((map, { TalkSentenceID, text, isContinue }) => ({
+          ...map,
+          [TalkSentenceID]: [{ key: TalkSentenceID, text, isContinue }],
+        }), {});
+        optionCounts = element.list.length;
+        break;
+      }
+      case 'WaitCustomString': {
+        from = getTalkSentenceId(element.value);
+        // console.log(from, '부터');
+        break;
+      }
+      case 'PlayTimeline-ComplexTalk': { break; }
+      case 'TriggerCustomString': {
+        if (optionCounts === 0) {
+          // console.log('뭔가 이상함');
+          return;
+        }
+        optionCounts -= 1;
+        to = getTalkSentenceId(element.value);
+        // set options
+        sortedOptions.filter(op => op > from);
+        const myTo = sortedOptions.find(op => op < to && op > from) ?? to;
+        // console.log(myTo, '까지');
+        const mis = getMissingsBetween(from, myTo);
+        if (mis.length) {
+          try {
+            options[from].push(...mis);
+          } catch (err) {
+            const optionKeys = Object.keys(options);
+            options[optionKeys[0]].push(...mis);
+            // FIXME: 코드 망했음
+            // 분기가 없는 경우같은 게 있는 것 같음
+          }
+        }
+        if (optionCounts === 0) {
+          // push options
+          results.push(options);
+          options = null;
+        }
+        break;
+      }
+    }
+    status = element.type;
+  }
+  if (status === 'PlayTimeline-ComplexTalk') {
+    const myFrom = Math.max(maxOptions.toString(), to.toString())
+    // to 를 당겨서 끝까지를 추가
+    results.push(options);
+    results.push(getMissingsBetween(myFrom));
+  }
+
+  return results;
 }
 
 console.log('====== summary =======');
