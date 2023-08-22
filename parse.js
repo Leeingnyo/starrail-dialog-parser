@@ -588,3 +588,9 @@ console.log('-------------');
 console.log('resetTaskType');
 console.log(JSON.stringify([...restTaskType], undefined, 2));
 console.log('-------------');
+
+const notUsedTalkKeys = TalkSentenceConfigKeys.filter(tk => !talkUsedMap[tk]);
+console.log('-------------');
+console.log('missing talk ids num:', notUsedTalkKeys.length);
+console.log(JSON.stringify(notUsedTalkKeys, undefined, 2));
+console.log('-------------');
