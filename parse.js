@@ -10,6 +10,7 @@ const normalizePath = path => `${currentPath}${sep}${path}`;
 const mainMissionMap = readJsonFile(normalizePath('ExcelOutput/MainMission.json'));
 const ConfigLevelMissionPath = normalizePath('Config/Level/Mission');
 const getMissionInfoPath = key => `${ConfigLevelMissionPath}${sep}${key}${sep}MissionInfo_${key}.json`;
+const getDropsDirPath = key => `Config/Level/Mission${sep}${key}${sep}Drop`;
 const getTalksDirPath = key => `Config/Level/Mission${sep}${key}${sep}Talk`;
 const getActsDirPath = key => `Config/Level/Mission${sep}${key}${sep}Act`;
 
@@ -34,7 +35,7 @@ const TalkSentenceConfigKeys = Object.keys(TalkSentenceConfig);
 const t = hash => TextMap[hash?.Hash ?? hash]; // hash
 const tt = tk => {
   if (!TalkSentenceConfig[tk]) {
-    return;
+    return { TalkSentenceID: tk };
   }
   const { TextmapTalkSentenceName: name, TalkSentenceText: text } = TalkSentenceConfig[tk];
   talkUsedMap[tk] = 1; // check as used
@@ -43,6 +44,7 @@ const tt = tk => {
 const getGroupTalkKeys = groupId => TalkSentenceConfigKeys.filter(key => key.startsWith(groupId) && key.length === 9);
 
 // utils
+const toJsonString = obj => JSON.stringify(obj, undefined, 2);
 const getGroupId = ids => {
   const xor = Array.from(Array(9).keys())
     .find(i =>
@@ -67,26 +69,122 @@ const context = { checkPerformanceRead, talkUsedMap, restTaskType };
 // ===================================================
 {
 
-const keys = Object.keys(mainMissionMap);
 // TODO: 조절 혹은 arguments
-// const givenKeys = ['1000101'];
+// const givenKeys = [1000101];
 const givenKeys = [];
 
-(givenKeys.length ? givenKeys : keys).forEach(key => {
+// MainMission ID 에 대해서
+// 7자리
+// TRRGGMM
+// * 임무 타입 T
+// 1 - 개척 임무
+// 2 - 월드 임무, 동행 임무, 열계의 징조 등
+// 3 - 일일 임무
+// 4 - 균형의 시련, 오염 청소, 눈에는 눈, 시뮬레이션 우주, 꽃받침, 폼폼 임무 등
+// 6 - 동행 임무 (최신)
+// 8 - 이벤트 임무
+// * 지역 코드 RR
+// 00 - 우주정거장 헤르타
+// 01 - 야릴로 VI
+// 02 - 선주 나부
+// * 그룹 번호 GG
+// 개척 임무 10002 의 경우 1000201~1000204 의 메인 미션으로 이루어져있다
+// 이름이 같을 수 있다
+// 월드 임무의 경우 전혀 엉뚱한 것들이 그룹으로 묶일 수 있다
+// * 임무 번호 MM
+// 임무 순서를 나타낸다
+// 임무 순서가 연속되지 않으면 별개의 그룹으로 취급한다
+const keys = Object.keys(mainMissionMap);
+keys.sort();
+
+/**
+ * ```
+ * {
+ *   [type: string]: {
+ *     [regionCode: string]: {
+ *       groupId: string, // 겹칠 수 있음
+ *       missions: string[], // 연속된 숫자
+ *     }[]
+ *   }
+ * }
+ * ```
+ */
+const groupedIdByTypeRegion = (givenKeys.length ? givenKeys : keys).reduce((result, mainMissionId) => {
+  if (mainMissionId.length !== 7) {
+    console.error('Invalid MainMission Id', mainMissionId);
+    return result;
+  }
+  const type = mainMissionId[0];
+  const regionCode = mainMissionId.slice(1, 3);
+  const groupId = mainMissionId.slice(3, 5);
+  const missionId = mainMissionId.slice(5, 7);
+
+  const groups = result?.[type]?.[regionCode] ?? [];
+  const lastSameGroup = [...groups].reverse().find(group => group.groupId === groupId);
+  if (lastSameGroup === undefined) {
+    return Object.assign(result, {
+      [type]: Object.assign(result[type] ?? {}, {
+        [regionCode]: [...groups, { groupId, missions: [missionId] }],
+      }),
+    });
+  }
+
+  if (+lastSameGroup.missions.at(-1) + 1 !== +missionId) {
+    return Object.assign(result, {
+      [type]: Object.assign(result[type] ?? {}, {
+        [regionCode]: [...groups, { groupId, missions: [missionId] }],
+      }),
+    });
+  }
+
+  lastSameGroup.missions.push(missionId);
+  return Object.assign(result, {
+    [type]: Object.assign(result[type] ?? {}, {
+      [regionCode]: groups,
+    }),
+  });
+}, {});
+
+Object.entries(groupedIdByTypeRegion).forEach(
+  ([type, groupedIdByRegion]) => Object.entries(groupedIdByRegion).forEach(
+    ([regionCode, groups]) => groups.forEach(
+      ({ groupId, missions }) => {
+        groupedMainMissionIds = missions.map(missionId => `${type}${regionCode}${groupId}${missionId}`);
+        handleGroupedMissions(`${type}${regionCode}${groupId}`, groupedMainMissionIds);
+      }
+    )
+  )
+);
+
+function handleGroupedMissions(missionGroupId, missionIds) {
   console.log('========================================================================');
-  console.log('MainMisson:', key, t(mainMissionMap[key].Name));
+  console.log('MainMisson Group:', missionGroupId);
+  console.log('List::');
+  missionIds.forEach(missionId => {
+  console.log('-', t(mainMissionMap[missionId].Name));
+  });
   console.log('------------------------------------------------------------------------');
 
-  const mission = mainMissionMap[key];
-  const MissionInfoPath = getMissionInfoPath(key);
-  const MissionInfo = readJsonFile(MissionInfoPath);
-  const { SubMissionList } = MissionInfo;
+  const missionInfos = groupedMainMissionIds.flatMap(missionId => {
+    const MissionInfoPath = getMissionInfoPath(missionId);
+    try {
+      const MissionInfo = readJsonFile(MissionInfoPath);
+      return [MissionInfo]
+    } catch (err) {
+      // console.warn(err);
+      return [];
+    }
+  });
+  const SubMissionListInGroupedMission = missionInfos.flatMap(({ SubMissionList }) => SubMissionList); // merged
 
-  const list = [...SubMissionList];
+  const list = [...SubMissionListInGroupedMission];
   const map = {};
   const sortedSubMissionList = [];
   let count = 0;
   let successSorting = true;
+  // FIXME: 이상한 소팅임
+  // A -> B 가 있으니 트리를 만든다음 거꾸로 나가면 됨
+  // 고리가 있는 경우 먼저 나온 애 순서로
   while (list.length > 0) {
     count += 1;
     const SubMission = list.shift();
@@ -100,12 +198,12 @@ const givenKeys = [];
       list.push(SubMission); // 다음 기회에~
     }
 
-    if (count > SubMissionList.length * (SubMissionList.length + 1) / 2) { // 망함
-      SubMissionList.forEach(SubMission => {
+    if (count > SubMissionListInGroupedMission.length * (SubMissionListInGroupedMission.length + 1) / 2) { // 망함
+      SubMissionListInGroupedMission.forEach(SubMission => {
         // console.debug(SubMission.ID, ' ---> ', SubMission.TakeParamIntList);
       });
       console.log('------------');
-      console.log('Sorting SubMissionList Failed:', key);
+      console.log('Sorting SubMissionList Failed:', groupedMainMissionIds);
       console.log('------------');
       successSorting = false;
       break;
@@ -113,8 +211,7 @@ const givenKeys = [];
   }
 
   const dialogs = [];
-
-  (successSorting ? sortedSubMissionList : SubMissionList).forEach(SubMission => {
+  (successSorting ? sortedSubMissionList : SubMissionListInGroupedMission).forEach(SubMission => {
     const { ID, MissionJsonPath } = SubMission;
     if (!MissionJsonPath) {
       return;
@@ -124,68 +221,46 @@ const givenKeys = [];
 
       const dialog = parseSequenceObject(MissionJson, context);
       if (dialog.length) {
-        dialogs.push({ ID, dialog });
+        dialogs.push({ SubMissionID: ID, dialog });
       }
     } catch (err) {
       console.error(err);
     }
   });
-
   console.log('--------------- MainMission Dialog ---------');
-  console.log(
-    JSON.stringify(dialogs, undefined, 2)
-  );
+  console.log(toJsonString(dialogs));
 
-  // Items
-  const TalksDirPath = getTalksDirPath(key)
-  if (fs.existsSync(normalizePath(TalksDirPath))) {
-    const others = [];
+  const others = [
+    { name: 'drop', getPath: getDropsDirPath },
+    { name: 'talk', getPath: getTalksDirPath },
+    { name: 'act', getPath: getActsDirPath },
+  ];
 
-    const filenames = fs.readdirSync(normalizePath(TalksDirPath));
-    filenames.map(filename => `${TalksDirPath}${sep}${filename}`).forEach(talkPath => {
-      try {
-        const talkJson = readJsonFile(normalizePath(talkPath));
+  others.forEach(({ name, getPath }) => {
+    const dialogs = [];
+    const dirPaths = groupedMainMissionIds.map(missionId => getPath(missionId))
+      .filter(path => fs.existsSync(normalizePath(path)));
+    dirPaths.forEach(dirPath => {
+      const filenames = fs.readdirSync(normalizePath(dirPath));
+      filenames.map(filename => `${dirPath}${sep}${filename}`)
+        .filter(filename => !checkPerformanceRead[filename]) // 위에서 읽은 것 제외하기
+        .forEach(filePath => {
+        try {
+          const jsonObject = readJsonFile(normalizePath(filePath));
 
-        const dialog = parseSequenceObject(talkJson, context);
-        if (dialog.length) {
-          others.push({ dialog });
+          const dialog = parseSequenceObject(jsonObject, context);
+          if (dialog.length) {
+            dialogs.push({ [name + 'Path']: filePath, dialog });
+          }
+        } catch (err) {
+          console.error(err);
         }
-      } catch (err) {
-        console.error(err);
-      }
+      });
     });
-
-    console.log('--------------- Talk Dialog ---------');
-    console.log(
-      JSON.stringify(others, undefined, 2)
-    );
-  }
-
-  // Acts
-  const ActsDirPath = getActsDirPath(key)
-  if (fs.existsSync(normalizePath(ActsDirPath))) {
-    const others = [];
-
-    const filenames = fs.readdirSync(normalizePath(ActsDirPath));
-    filenames.map(filename => `${ActsDirPath}${sep}${filename}`).filter(s => !checkPerformanceRead[s]).forEach(actPath => {
-      try {
-        const actJson = readJsonFile(normalizePath(actPath));
-
-        const dialog = parseSequenceObject(actJson, context);
-        if (dialog.length) {
-          others.push({ dialog });
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    });
-
-    console.log('--------------- Acts Dialog ---------');
-    console.log(
-      JSON.stringify(others, undefined, 2)
-    );
-  }
-});
+    console.log(`--------------- ${name[0].toUpperCase()}${name.slice(1)} Dialog ---------`);
+    console.log(toJsonString(dialogs));
+  });
+}
 
 console.log('====== summary =======');
 console.log('-------------');
@@ -271,11 +346,11 @@ function parseTask(Task, context = {}) {
       }
       const { PerformancePath } = performanceMap[PerformanceType][PerformanceID];
       try {
-        const Performance = readJsonFile(normalizePath(PerformancePath));
-
         if (checkPerformanceRead) {
           checkPerformanceRead[PerformancePath] = 1; // check as read
         }
+
+        const Performance = readJsonFile(normalizePath(PerformancePath));
 
         switch (PerformanceType) {
           case 'PlayVideo': {
