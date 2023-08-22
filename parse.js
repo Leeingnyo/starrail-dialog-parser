@@ -271,7 +271,7 @@ console.log('-------------');
 const notUsedTalkKeys = TalkSentenceConfigKeys.filter(tk => !talkUsedMap[tk]);
 console.log('-------------');
 console.log('missing talk ids num:', notUsedTalkKeys.length, '/', TalkSentenceConfigKeys.length);
-// console.log(JSON.stringify(notUsedTalkKeys, undefined, 2));
+console.log(JSON.stringify(notUsedTalkKeys.map(key => tt(key)).filter(({ text }) => text), undefined, 2));
 console.log('-------------');
 
 }
@@ -412,6 +412,7 @@ function parseTask(Task, context = {}) {
               type: 'TriggerPerformance',
               PerformanceType,
               content: parsePerformanceWithOptions(parsedSequenceObject, missingRestTalks),
+              missingRestTalks,
             };
           }
           case 'E': { // 얘넨 뭐지
@@ -649,6 +650,7 @@ function parseTask(Task, context = {}) {
  * @returns DialogSequence
  */
 function parsePerformanceWithOptions(sequenceObject, missingRestTalks) {
+  return sequenceObject;
   const getMissingsBetween = (min, max) =>
     missingRestTalks.filter(({ key }) => min <= key && (max === undefined || key < max));
   // context
