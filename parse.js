@@ -133,6 +133,13 @@ console.log('-------- gameplay mission dialog -------');
 console.log(toJsonString(gameplayMissionDialog));
 console.log('----------------------------');
 
+const rogueDialog = [];
+parseDialogue({ path: 'Config/Level/RogueDialogue', dialogs: rogueDialog, context, label: 'roguePath' });
+console.log('============================');
+console.log('-------- rogue dialog -------');
+console.log(toJsonString(rogueDialog));
+console.log('----------------------------');
+
 const parseMunicipalChat = params => parseFile({
   ...params,
   fileHandle({ path, dialogs, label }) {
@@ -441,7 +448,7 @@ Promise.resolve().then(() => {
     groupedMissingTalks
       .filter(({ groupId }) => !groupId.startsWith('9') && !groupId.startsWith('8'))
       .filter(({ isBackAndForthUsed }) => isBackAndForthUsed).length);
-  console.log(toJsonString(groupedMissingTalks));
+  console.log(toJsonString(groupedMissingTalks.sort((a, b) => a.isBackAndForthUsed - b.isBackAndForthUsed)));
   console.log('-------------');
 });
 
@@ -894,6 +901,58 @@ function parseTask(Task, context = {}) {
         type: 'SequenceConfig',
         taskList: parseTaskList(TaskList, context),
       }
+    }
+
+    case 'RPG.GameCore.PropStateChangeListenerConfig': {
+      const { OnCancel } = Task;
+      const callback = parseTaskList(OnCancel, context);
+      return {
+        type: 'PropStateChangeListenerConfig',
+        callback,
+      }
+    }
+    case 'RPG.GameCore.PropPuzzleEventListener': {
+      const { FinishCallback } = Task;
+      const callback = parseTaskList(FinishCallback, context);
+      return {
+        type: 'PropStateChangeListenerConfig',
+        callback,
+      }
+    }
+    case 'RPG.GameCore.PuzzleBoxmanInBoard': {
+      const { OnPlayerEnter, OnPlayerLeave } = Task;
+      const enter = parseTaskList(OnPlayerEnter ?? [], context);
+      const leave = parseTaskList(OnPlayerLeave ?? [], context);
+      return {
+        type: 'PropStateChangeListenerConfig',
+        enter,
+        leave
+      }
+    }
+    case 'RPG.GameCore.TakenMazePuzzleChallenge': {
+      const { OnReset } = Task;
+      const reset = parseTaskList(OnReset ?? [], context);
+      return {
+        type: 'TakenMazePuzzleChallenge',
+        reset,
+      }
+    }
+    case 'RPG.GameCore.DronesPuzzleEventListener': {
+      const {
+        LeaveSafeAreaCallback,
+        LeaveMoveAreaCallback,
+        SwitchFPSCallback,
+        SwitchTPSCallback,
+        ChaseEnemyAddCallback,
+      } = Task;
+      return {
+        type: 'DronesPuzzleEventListener',
+        leaveSafeArea: parseTaskList(LeaveSafeAreaCallback ?? [], context),
+        leaveMoveArea: parseTaskList(LeaveMoveAreaCallback ?? [], context),
+        switchFps: parseTaskList(SwitchFPSCallback ?? [], context),
+        switchTps: parseTaskList(SwitchTPSCallback ?? [], context),
+        chaseEnemyAdd: parseTaskList(ChaseEnemyAddCallback ?? [], context),
+      };
     }
     default: {
       // console.warn('Unknown Task', JSON.stringify(Task, undefined, 2));
