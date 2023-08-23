@@ -82,30 +82,31 @@ const context = { checkPerformanceRead, talkUsedMap, restTaskType };
 
 // NPC Dialogue
 // Prop Dialogue
-const parseDialogue = (path, dialogArr, context, label = 'path') => {
+// FIXME: 
+const parseDialogue = ({ path, dialogs, context, label = 'path' }) => {
   const stat = fs.statSync(normalizePath(path));
   if (stat.isDirectory()) {
     const filenames = fs.readdirSync(normalizePath(path));
     for (const filename of filenames) {
-      parseDialogue(`${path}${sep}${filename}`, dialogArr, context, label);
+      parseDialogue({ path: `${path}${sep}${filename}`, dialogs, context, label });
     }
   } else {
     const json = readJsonFile(normalizePath(path));
     const dialog = parseSequenceObject(json, context);
-    dialogArr.push({ [label]: path, dialog });
+    dialogs.push({ [label]: path, dialog });
   }
 }
 
 const npcDialog = [];
-parseDialogue(NPCDirPath, npcDialog, context, 'npcPath');
-parseDialogue(NPCDialogueDirPath, npcDialog, context, 'npcDialoguePath');
+parseDialogue({ path: NPCDirPath, dialogs: npcDialog, context, label: 'npcPath' });
+parseDialogue({ path: NPCDialogueDirPath, dialogs: npcDialog, context, label: 'npcDialoguePath' });
 console.log('============================');
 console.log('--------- npc dialog -------');
 console.log(toJsonString(npcDialog));
 console.log('----------------------------');
 
 const propDialog = [];
-parseDialogue(PropDialogueDirPath, propDialog, context, 'propPath');
+parseDialogue({ path: PropDialogueDirPath, dialogs: propDialog, context, label: 'propPath' });
 console.log('============================');
 console.log('-------- prop dialog -------');
 console.log(toJsonString(propDialog));
