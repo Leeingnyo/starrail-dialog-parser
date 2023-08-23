@@ -202,13 +202,12 @@ Object.entries(groupedIdByTypeRegion).forEach(
 
 const missionDirNames = fs.readdirSync(normalizePath(MissionPath));
 const notHandled = missionDirNames.filter(dirname => !handledMissionId.includes(dirname));
-console.log('not handled', notHandled);
-notHandled.forEach(id => handleGroupedMissions(id, [id]));
+notHandled.forEach(id => handleGroupedMissions(id, [id]), true);
 
-function handleGroupedMissions(missionGroupId, missionIds) {
+function handleGroupedMissions(missionGroupId, missionIds, isNotHandled) {
   handledMissionId.push(...missionIds);
   console.log('========================================================================');
-  console.log('MainMisson Group:', missionGroupId);
+  console.log('MainMisson Group:', missionGroupId, isNotHandled ? '(not handled)' : '');
   console.log('List::');
   missionIds.forEach(missionId => {
   console.log('-', t(MainMission[missionId]?.Name));
@@ -221,6 +220,9 @@ function handleGroupedMissions(missionGroupId, missionIds) {
       const MissionInfo = readJsonFile(normalizePath(MissionInfoPath));
       return [MissionInfo]
     } catch (err) {
+      console.log('No Info file, need to read directory');
+      // TODO: 미션 폴더를 읽어서 Info 가 없어도 MissionJson 읽어오기, 파일 이름으로부터 ID 와 MissionJson 만들어서
+      // { SubMissionList: { ID, MissionJson }[] } 리턴하기
       // console.warn(err);
       return [];
     }
@@ -601,6 +603,13 @@ function parseTask(Task, context = {}) {
       const { Type, TimelineName }= Task;
       switch (Type) {
         case 'Cutscene': {
+          if (!CutSceneConfig[TimelineName]) {
+            return {
+              type: 'PlayTimeline-Cutscene (no config)',
+              captions: [],
+              name: TimelineName,
+            }
+          }
           const { CaptionPath, CutSceneName } = CutSceneConfig[TimelineName];
           if (!CaptionPath) {
             return {
