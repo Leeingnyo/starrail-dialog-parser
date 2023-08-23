@@ -126,6 +126,13 @@ console.log(toJsonString(mazeDialog));
 console.log('----------------------------');
 // TODO: typing 하기
 
+const gameplayMissionDialog = [];
+parseDialogue({ path: 'Config/Level/GameplayMission', dialogs: gameplayMissionDialog, context, label: 'gameplayPath' });
+console.log('============================');
+console.log('-------- gameplay mission dialog -------');
+console.log(toJsonString(gameplayMissionDialog));
+console.log('----------------------------');
+
 const parseMunicipalChat = params => parseFile({
   ...params,
   fileHandle({ path, dialogs, label }) {
@@ -407,9 +414,34 @@ Promise.resolve().then(() => {
 
 
   const notUsedTalkKeys = TalkSentenceConfigKeys.filter(tk => !talkUsedMap[tk]);
+  const groupIds = removeDup(notUsedTalkKeys.map(id => Math.floor(id / Math.pow(10, 2)).toString()));
+  const groupedMissingTalks = groupIds.flatMap(groupId => {
+    const TalkSentenceIDs = getGroupTalkKeys(groupId).filter(key => !talkUsedMap?.[key]);
+    if (!TalkSentenceIDs.length) return [];
+    const first = TalkSentenceIDs[0];
+    const last = TalkSentenceIDs.at(-1);
+    const isBackAndForthUsed = !!(talkUsedMap[+first - 1] || talkUsedMap[+last + 1])
+    return [{
+      groupId,
+      isBackAndForthUsed,
+      speakings: TalkSentenceIDs.map(TalkSentenceID => tt(TalkSentenceID, false))
+    }];
+  });
   console.log('-------------');
   console.log('missing talk ids num:', notUsedTalkKeys.length, '/', TalkSentenceConfigKeys.length);
-  console.log(JSON.stringify(notUsedTalkKeys.map(key => tt(key)).filter(({ text }) => text), undefined, 2));
+  console.log('missing talk group num:', groupedMissingTalks.length);
+  console.log('missing talk group 9:', groupedMissingTalks.filter(({ groupId }) => groupId.startsWith('9')).length);
+  console.log('missing talk group 8:', groupedMissingTalks.filter(({ groupId }) => groupId.startsWith('8')).length);
+  console.log('no clues group num:', groupedMissingTalks.filter(({ isBackAndForthUsed }) => isBackAndForthUsed).length);
+  console.log('no clues group num except 9:',
+    groupedMissingTalks
+      .filter(({ groupId }) => !groupId.startsWith('9'))
+      .filter(({ isBackAndForthUsed }) => isBackAndForthUsed).length);
+  console.log('no clues group num except 9 and 8:',
+    groupedMissingTalks
+      .filter(({ groupId }) => !groupId.startsWith('9') && !groupId.startsWith('8'))
+      .filter(({ isBackAndForthUsed }) => isBackAndForthUsed).length);
+  console.log(toJsonString(groupedMissingTalks));
   console.log('-------------');
 });
 
