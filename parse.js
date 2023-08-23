@@ -12,6 +12,8 @@ const getDropsDirPath = missionId => `Config/Level/Mission${sep}${missionId}${se
 const getTalksDirPath = missionId => `Config/Level/Mission${sep}${missionId}${sep}Talk`;
 const getActsDirPath = missionId => `Config/Level/Mission${sep}${missionId}${sep}Act`;
 const getBattlesDirPath = missionId => `Config/Level/Mission${sep}${missionId}${sep}Battle`;
+const NPCDialogueDirPath = 'Config/Level/NPCDialogue';
+const PropDialogueDirPath = 'Config/Level/PropDialogue';
 
 // Static Data
 const MainMission = readJsonFile(normalizePath('ExcelOutput/MainMission.json'));
@@ -75,6 +77,36 @@ const context = { checkPerformanceRead, talkUsedMap, restTaskType };
 // APPLICATION START
 // ===================================================
 {
+
+// NPC Dialogue
+// Prop Dialogue
+const parseDialogue = (path, dialog, context, label = 'path') => {
+  const stat = fs.statSync(normalizePath(path));
+  if (stat.isDirectory()) {
+    const filenames = fs.readdirSync(normalizePath(path));
+    for (const filename of filenames) {
+      parseDialogue(`${path}${sep}${filename}`, dialog, context, label);
+    }
+  } else {
+    const json = readJsonFile(normalizePath(path));
+    const dialog = parseSequenceObject(json, context);
+    dialog.push({ [label]: path, dialog });
+  }
+}
+
+const npcDialog = [];
+parseDialogue(NPCDialogueDirPath, npcDialog, context, 'npcPath');
+console.log('============================');
+console.log('--------- npc dialog -------');
+console.log(toJsonString(npcDialog));
+console.log('----------------------------');
+
+const propDialog = [];
+parseDialogue(PropDialogueDirPath, propDialog, context, 'propPath');
+console.log('============================');
+console.log('-------- prop dialog -------');
+console.log(toJsonString(propDialog));
+console.log('----------------------------');
 
 // TODO: 조절 혹은 arguments
 // const givenKeys = [1000101];
@@ -693,7 +725,7 @@ function parseTask(Task, context = {}) {
       const cancel = parseTaskList(OnSubmitCancel, context);
       return {
         type: 'SelectMissionItem',
-        text: tt(SimpleTalk.TalkSentenceID),
+        text: SimpleTalk ? tt(SimpleTalk.TalkSentenceID) : null,
         ItemSelect,
         success,
         fail,
