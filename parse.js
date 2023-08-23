@@ -479,15 +479,19 @@ Promise.resolve().then(() => {
   console.log('missing talk group num:', groupedMissingTalks.length);
   console.log('missing talk group 9:', groupedMissingTalks.filter(({ groupId }) => groupId.startsWith('9')).length);
   console.log('missing talk group 8:', groupedMissingTalks.filter(({ groupId }) => groupId.startsWith('8')).length);
-  console.log('no clues group num:', groupedMissingTalks.filter(({ isBackAndForthUsed }) => isBackAndForthUsed).length);
+  console.log('no clues group num:', groupedMissingTalks.filter(({ isBackAndForthUsed }) => !isBackAndForthUsed).length);
   console.log('no clues group num except 9:',
     groupedMissingTalks
       .filter(({ groupId }) => !groupId.startsWith('9'))
-      .filter(({ isBackAndForthUsed }) => isBackAndForthUsed).length);
+      .filter(({ isBackAndForthUsed }) => !isBackAndForthUsed).length);
   console.log('no clues group num except 9 and 8:',
     groupedMissingTalks
       .filter(({ groupId }) => !groupId.startsWith('9') && !groupId.startsWith('8'))
-      .filter(({ isBackAndForthUsed }) => isBackAndForthUsed).length);
+      .filter(({ isBackAndForthUsed }) => !isBackAndForthUsed).length);
+  console.log('no clues group num 1 and 2:',
+    groupedMissingTalks
+      .filter(({ groupId }) => groupId.startsWith('1') || groupId.startsWith('2'))
+      .filter(({ isBackAndForthUsed }) => !isBackAndForthUsed).length);
   console.log(toJsonString(groupedMissingTalks.sort((a, b) => a.isBackAndForthUsed - b.isBackAndForthUsed)));
   console.log('-------------');
 });
