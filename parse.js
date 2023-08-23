@@ -93,6 +93,7 @@ const parseFile = (params) => {
   } else {
     fileHandle(params);
   }
+  return dialogs;
 }
 const parseDialogue = (params) => parseFile({
   ...params,
@@ -139,6 +140,45 @@ console.log('============================');
 console.log('-------- rogue dialog -------');
 console.log(toJsonString(rogueDialog));
 console.log('----------------------------');
+
+// ExcelOutput/TrainVisitorConfig.json 에 누가 누군지 있음
+console.log('============================');
+console.log('-------- visitor behavior dialog -------');
+console.log(toJsonString(
+  parseFile({
+    path: 'ExcelOutput/VisitorBehaviorConfig.json', dialogs: [], context, label: 'visitor',
+    fileHandle({ path, dialogs }) {
+      const json = readJsonFile(normalizePath(path));
+      const visitorIds = Object.keys(json);
+      visitorIds.forEach(visitorId => {
+        const dialog = [];
+        Object.values(json[visitorId]).forEach(item => {
+          const { PerformanceID, DefaultPerformanceID, NpcBubbleTalkSentenceID } = item;
+          const { PerformancePath } = performanceMap['E'][PerformanceID];
+          const { DefaultPerformancePath } = performanceMap['E'][DefaultPerformanceID];
+          try {
+            var Performance = readJsonFile(normalizePath(PerformancePath));
+          } catch (err) {
+            console.error(err);
+          }
+          try {
+            var DefaultPerformance = readJsonFile(normalizePath(DefaultPerformancePath));
+          } catch (err) {
+            console.error(err);
+          }
+          dialog.push({
+            text: tt(NpcBubbleTalkSentenceID),
+            performance: parseSequenceObject(Performance ?? {}, context),
+            defaultPerformance: parseSequenceObject(DefaultPerformance ?? {}, context),
+          });
+        });
+        dialogs.push({ visitor: visitorId, dialog });
+      });
+    }
+  })
+));
+console.log('----------------------------');
+
 
 const parseMunicipalChat = params => parseFile({
   ...params,
