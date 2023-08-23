@@ -80,17 +80,17 @@ const context = { checkPerformanceRead, talkUsedMap, restTaskType };
 
 // NPC Dialogue
 // Prop Dialogue
-const parseDialogue = (path, dialog, context, label = 'path') => {
+const parseDialogue = (path, dialogArr, context, label = 'path') => {
   const stat = fs.statSync(normalizePath(path));
   if (stat.isDirectory()) {
     const filenames = fs.readdirSync(normalizePath(path));
     for (const filename of filenames) {
-      parseDialogue(`${path}${sep}${filename}`, dialog, context, label);
+      parseDialogue(`${path}${sep}${filename}`, dialogArr, context, label);
     }
   } else {
     const json = readJsonFile(normalizePath(path));
     const dialog = parseSequenceObject(json, context);
-    dialog.push({ [label]: path, dialog });
+    dialogArr.push({ [label]: path, dialog });
   }
 }
 
@@ -188,7 +188,7 @@ Object.entries(groupedIdByTypeRegion).forEach(
   ([type, groupedIdByRegion]) => Object.entries(groupedIdByRegion).forEach(
     ([regionCode, groups]) => groups.forEach(
       ({ groupId, missions }) => {
-        groupedMainMissionIds = missions.map(missionId => `${type}${regionCode}${groupId}${missionId}`);
+        const groupedMainMissionIds = missions.map(missionId => `${type}${regionCode}${groupId}${missionId}`);
         handleGroupedMissions(`${type}${regionCode}${groupId}`, groupedMainMissionIds);
       }
     )
@@ -204,7 +204,7 @@ function handleGroupedMissions(missionGroupId, missionIds) {
   });
   console.log('------------------------------------------------------------------------');
 
-  const missionInfos = groupedMainMissionIds.flatMap(missionId => {
+  const missionInfos = missionIds.flatMap(missionId => {
     const MissionInfoPath = getMissionInfoPath(missionId);
     try {
       const MissionInfo = readJsonFile(normalizePath(MissionInfoPath));
@@ -242,7 +242,7 @@ function handleGroupedMissions(missionGroupId, missionIds) {
         // console.debug(SubMission.ID, ' ---> ', SubMission.TakeParamIntList);
       });
       console.log('------------');
-      console.log('Sorting SubMissionList Failed:', groupedMainMissionIds);
+      console.log('Sorting SubMissionList Failed:', missionIds);
       console.log('------------');
       successSorting = false;
       break;
@@ -279,7 +279,7 @@ function handleGroupedMissions(missionGroupId, missionIds) {
 
   others.forEach(({ name, getPath }) => {
     const dialogs = [];
-    const dirPaths = groupedMainMissionIds.map(missionId => getPath(missionId))
+    const dirPaths = missionIds.map(missionId => getPath(missionId))
       .filter(path => fs.existsSync(normalizePath(path)));
     dirPaths.forEach(dirPath => {
       const filenames = fs.readdirSync(normalizePath(dirPath));
