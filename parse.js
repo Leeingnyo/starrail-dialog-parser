@@ -7,15 +7,14 @@ const readJsonFile = path => JSON.parse(fs.readFileSync(path, { encoding: 'utf-8
 // path utils
 const currentPath = `.${sep}StarRailData`;
 const normalizePath = path => `${currentPath}${sep}${path}`;
-const mainMissionMap = readJsonFile(normalizePath('ExcelOutput/MainMission.json'));
-const ConfigLevelMissionPath = normalizePath('Config/Level/Mission');
-const getMissionInfoPath = key => `${ConfigLevelMissionPath}${sep}${key}${sep}MissionInfo_${key}.json`;
-const getDropsDirPath = key => `Config/Level/Mission${sep}${key}${sep}Drop`;
-const getTalksDirPath = key => `Config/Level/Mission${sep}${key}${sep}Talk`;
-const getActsDirPath = key => `Config/Level/Mission${sep}${key}${sep}Act`;
-const getBattlesDirPath = key => `Config/Level/Mission${sep}${key}${sep}Battle`;
+const getMissionInfoPath = missionId => `Config/Level/Mission${sep}${missionId}${sep}MissionInfo_${missionId}.json`;
+const getDropsDirPath = missionId => `Config/Level/Mission${sep}${missionId}${sep}Drop`;
+const getTalksDirPath = missionId => `Config/Level/Mission${sep}${missionId}${sep}Talk`;
+const getActsDirPath = missionId => `Config/Level/Mission${sep}${missionId}${sep}Act`;
+const getBattlesDirPath = missionId => `Config/Level/Mission${sep}${missionId}${sep}Battle`;
 
 // Static Data
+const MainMission = readJsonFile(normalizePath('ExcelOutput/MainMission.json'));
 const performanceMap = {
   A: readJsonFile(normalizePath('ExcelOutput/PerformanceA.json')), // Act
   C: readJsonFile(normalizePath('ExcelOutput/PerformanceC.json')), // Cutscene
@@ -31,11 +30,12 @@ const CutSceneConfig = readJsonFile(normalizePath('ExcelOutput/CutSceneConfig.js
 const TalkSentenceConfig = readJsonFile(normalizePath('ExcelOutput/TalkSentenceConfig.json'));
 const TextMap = readJsonFile(normalizePath('TextMap/TextMapKR.json'));
 
+// talk sentence config utils
 const talkUsedMap = {};
 const TalkSentenceConfigKeys = Object.keys(TalkSentenceConfig);
 const t = hash => TextMap[hash?.Hash ?? hash]; // hash
 const tt = (tk, checked = 1) => {
-  if (+tk === 812322815) {
+  if (+tk === 100040120) {
     // console.log(Error('있는데?').stack);
   }
   if (checked) {
@@ -101,7 +101,7 @@ const givenKeys = [];
 // * 임무 번호 MM
 // 임무 순서를 나타낸다
 // 임무 순서가 연속되지 않으면 별개의 그룹으로 취급한다
-const keys = Object.keys(mainMissionMap);
+const keys = Object.keys(MainMission);
 keys.sort();
 
 /**
@@ -168,14 +168,14 @@ function handleGroupedMissions(missionGroupId, missionIds) {
   console.log('MainMisson Group:', missionGroupId);
   console.log('List::');
   missionIds.forEach(missionId => {
-  console.log('-', t(mainMissionMap[missionId].Name));
+  console.log('-', t(MainMission[missionId].Name));
   });
   console.log('------------------------------------------------------------------------');
 
   const missionInfos = groupedMainMissionIds.flatMap(missionId => {
     const MissionInfoPath = getMissionInfoPath(missionId);
     try {
-      const MissionInfo = readJsonFile(MissionInfoPath);
+      const MissionInfo = readJsonFile(normalizePath(MissionInfoPath));
       return [MissionInfo]
     } catch (err) {
       // console.warn(err);
@@ -278,7 +278,7 @@ function handleGroupedMissions(missionGroupId, missionIds) {
     console.log('MainMisson Group:', missionGroupId);
     console.log('List::');
     missionIds.forEach(missionId => {
-    console.log('-', t(mainMissionMap[missionId].Name));
+    console.log('-', t(MainMission[missionId].Name));
     });
     console.log('------------------------------------------------------------------------');
     const ids = removeDup(totalDialogs.flatMap(_ => _).flatMap(({ dialog }) => {
@@ -378,6 +378,7 @@ function parseTaskList(TaskList = [], context) {
  * | { type: 'PlayAndWaitSimpleTalk'; speakings: Talk[] }
  * | { type: 'PlayMessage'; MessageSectionID: string }
  * | { type: 'PredicateTaskList'; Predicate: unknown; success: ParsedTask[]; failed: ParsedTask[] }
+ * // 더 많이 추가됐음
  * |
  */
 function parseTask(Task, context = {}) {
@@ -743,7 +744,6 @@ function parseTask(Task, context = {}) {
       if (/TalkSentenceID/.test(JSON.stringify(Task, undefined, 2))) {
         return { type: 'ImportantUnhandledTask', Task };
       }
-      return Task;
       break;
     }
   }
