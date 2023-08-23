@@ -80,22 +80,26 @@ const context = { checkPerformanceRead, talkUsedMap, restTaskType };
 // ===================================================
 {
 
-// NPC Dialogue
-// Prop Dialogue
-// FIXME: 
-const parseDialogue = ({ path, dialogs, context, label = 'path' }) => {
+const parseFile = (params) => {
+  const { path, dialogs, context, label = 'path', fileHandle } = params;
   const stat = fs.statSync(normalizePath(path));
   if (stat.isDirectory()) {
     const filenames = fs.readdirSync(normalizePath(path));
     for (const filename of filenames) {
-      parseDialogue({ path: `${path}${sep}${filename}`, dialogs, context, label });
+      parseFile({ ...params, path: `${path}${sep}${filename}` });
     }
   } else {
+    fileHandle(params);
+  }
+}
+const parseDialogue = (params) => parseFile({
+  ...params,
+  fileHandle({ path, dialogs, context, label }) {
     const json = readJsonFile(normalizePath(path));
     const dialog = parseSequenceObject(json, context);
     dialogs.push({ [label]: path, dialog });
   }
-}
+});
 
 const npcDialog = [];
 parseDialogue({ path: NPCDirPath, dialogs: npcDialog, context, label: 'npcPath' });
