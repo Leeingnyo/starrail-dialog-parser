@@ -828,7 +828,10 @@ function parseTask(Task, context = {}) {
       // ignore
       const { BubbleTalkInfoList } = Task;
       const speakings = BubbleTalkInfoList.map(({ TalkSentenceID }) => tt(TalkSentenceID));
-      return;
+      return {
+        type: 'PlayNPCBubbleTalk',
+        speakings,
+      };
     }
     case 'RPG.GameCore.SwitchCase': {
       const { TaskList, DefaultTask } = Task;
