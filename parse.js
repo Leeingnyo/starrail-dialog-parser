@@ -12,6 +12,8 @@ const getDropsDirPath = missionId => `Config/Level/Mission${sep}${missionId}${se
 const getTalksDirPath = missionId => `Config/Level/Mission${sep}${missionId}${sep}Talk`;
 const getActsDirPath = missionId => `Config/Level/Mission${sep}${missionId}${sep}Act`;
 const getBattlesDirPath = missionId => `Config/Level/Mission${sep}${missionId}${sep}Battle`;
+const MissionPath = 'Config/Level/Mission';
+const NPCDirPath = 'Config/Level/NPC';
 const NPCDialogueDirPath = 'Config/Level/NPCDialogue';
 const PropDialogueDirPath = 'Config/Level/PropDialogue';
 
@@ -95,7 +97,8 @@ const parseDialogue = (path, dialogArr, context, label = 'path') => {
 }
 
 const npcDialog = [];
-parseDialogue(NPCDialogueDirPath, npcDialog, context, 'npcPath');
+parseDialogue(NPCDirPath, npcDialog, context, 'npcPath');
+parseDialogue(NPCDialogueDirPath, npcDialog, context, 'npcDialoguePath');
 console.log('============================');
 console.log('--------- npc dialog -------');
 console.log(toJsonString(npcDialog));
@@ -133,7 +136,7 @@ const givenKeys = [];
 // * 임무 번호 MM
 // 임무 순서를 나타낸다
 // 임무 순서가 연속되지 않으면 별개의 그룹으로 취급한다
-const keys = Object.keys(MainMission);
+const keys = Object.keys(MainMission); // FIXME: MainMission JSON 외에도 모든 폴더에 대해 다 찾아야 할 것 같음
 keys.sort();
 
 /**
@@ -184,6 +187,7 @@ const groupedIdByTypeRegion = (givenKeys.length ? givenKeys : keys).reduce((resu
   });
 }, {});
 
+const handledMissionId = [];
 Object.entries(groupedIdByTypeRegion).forEach(
   ([type, groupedIdByRegion]) => Object.entries(groupedIdByRegion).forEach(
     ([regionCode, groups]) => groups.forEach(
@@ -195,12 +199,18 @@ Object.entries(groupedIdByTypeRegion).forEach(
   )
 );
 
+const missionDirNames = fs.readdirSync(normalizePath(MissionPath));
+const notHandled = missionDirNames.filter(dirname => !handledMissionId.includes(dirname));
+console.log('not handled', notHandled);
+notHandled.forEach(id => handleGroupedMissions(id, [id]));
+
 function handleGroupedMissions(missionGroupId, missionIds) {
+  handledMissionId.push(...missionIds);
   console.log('========================================================================');
   console.log('MainMisson Group:', missionGroupId);
   console.log('List::');
   missionIds.forEach(missionId => {
-  console.log('-', t(MainMission[missionId].Name));
+  console.log('-', t(MainMission[missionId]?.Name));
   });
   console.log('------------------------------------------------------------------------');
 
@@ -310,7 +320,7 @@ function handleGroupedMissions(missionGroupId, missionIds) {
     console.log('MainMisson Group:', missionGroupId);
     console.log('List::');
     missionIds.forEach(missionId => {
-    console.log('-', t(MainMission[missionId].Name));
+    console.log('-', t(MainMission[missionId]?.Name));
     });
     console.log('------------------------------------------------------------------------');
     const ids = removeDup(totalDialogs.flatMap(_ => _).flatMap(({ dialog }) => {
@@ -367,7 +377,7 @@ Promise.resolve().then(() => {
  */
 function parseSequenceObject({ OnInitSequece, OnStartSequece }, context) {
   const dialog = [];
-  OnStartSequece.forEach((Sequence, index) => {
+  OnStartSequece?.forEach((Sequence, index) => {
     const taskList = parseTaskList(Sequence.TaskList, context);
     if (taskList.length) {
       dialog.push({ taskListIndex: index, taskList });
@@ -659,10 +669,12 @@ function parseTask(Task, context = {}) {
         MessageSectionID,
       };
     }
+    case 'SwitchCase-Item':
+    case 'RPG.GameCore.PredicateTaskListWithFail':
     case 'RPG.GameCore.PredicateTaskList': {
-      const { SuccessTaskList, FailedTaskList, Predicate } = Task;
+      const { $type, SuccessTaskList, FailedTaskList, Predicate } = Task;
       return {
-        type: 'PredicateTaskList',
+        type: $type ? 'PredicateTaskList' : 'SwitchCase-Item',
         Predicate,
         success: SuccessTaskList ? parseTaskList(SuccessTaskList, context) : [],
         failed: FailedTaskList ? parseTaskList(FailedTaskList, context) : [],
@@ -770,10 +782,37 @@ function parseTask(Task, context = {}) {
       const speakings = BubbleTalkInfoList.map(({ TalkSentenceID }) => tt(TalkSentenceID));
       return;
     }
+    case 'RPG.GameCore.SwitchCase': {
+      const { TaskList, DefaultTask } = Task;
+      return {
+        type: 'SwitchCase',
+        taskList: TaskList ? parseTaskList(TaskList.map(Task => ({ $type: 'SwitchCase-Item', ...Task })), context) : [],
+        default: DefaultTask ? parseTaskList(DefaultTask.map(Task => ({ $type: 'SwitchCase-Item', ...Task })), context) : [],
+      }
+    }
+    case 'RPG.GameCore.PlaySequenceDialogue': {
+      const { Dialogues } = Task;
+      const dialogues = parseTaskList(Dialogues, context);
+      return {
+        type: 'PlaySequenceDialogue',
+        dialogues,
+      };
+    }
+    case 'RPG.GameCore.SequenceConfig': {
+      const { TaskList } = Task;
+      return {
+        type: 'SequenceConfig',
+        taskList: parseTaskList(TaskList, context),
+      }
+    }
     default: {
       // console.warn('Unknown Task', JSON.stringify(Task, undefined, 2));
       restTaskType.add(type);
-      if (/TalkSentenceID/.test(JSON.stringify(Task, undefined, 2))) {
+      if (
+        /TalkSentenceID/.test(JSON.stringify(Task, undefined, 2)) ||
+        /TriggerPerformance/.test(JSON.stringify(Task, undefined, 2)) ||
+        /PlayTimeline/.test(JSON.stringify(Task, undefined, 2))
+      ) {
         return { type: 'ImportantUnhandledTask', Task };
       }
       break;
