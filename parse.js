@@ -16,6 +16,7 @@ const MissionPath = 'Config/Level/Mission';
 const NPCDirPath = 'Config/Level/NPC';
 const NPCDialogueDirPath = 'Config/Level/NPCDialogue';
 const PropDialogueDirPath = 'Config/Level/PropDialogue';
+const MazeDirPath = 'Config/Level/Maze';
 const MunicipalChatDirPath = 'Config/Level/MunicipalChat';
 
 // Static Data
@@ -117,6 +118,14 @@ console.log('-------- prop dialog -------');
 console.log(toJsonString(propDialog));
 console.log('----------------------------');
 
+const mazeDialog = [];
+parseDialogue({ path: MazeDirPath, dialogs: mazeDialog, context, label: 'mazePath' });
+console.log('============================');
+console.log('-------- maze dialog -------');
+console.log(toJsonString(mazeDialog));
+console.log('----------------------------');
+// TODO: typing 하기
+
 const parseMunicipalChat = params => parseFile({
   ...params,
   fileHandle({ path, dialogs, label }) {
@@ -175,7 +184,7 @@ const givenKeys = [];
 // * 임무 번호 MM
 // 임무 순서를 나타낸다
 // 임무 순서가 연속되지 않으면 별개의 그룹으로 취급한다
-const keys = Object.keys(MainMission); // FIXME: MainMission JSON 외에도 모든 폴더에 대해 다 찾아야 할 것 같음
+const keys = Object.keys(MainMission);
 keys.sort();
 
 /**
@@ -378,8 +387,6 @@ function handleGroupedMissions(missionGroupId, missionIds, isNotHandled) {
       }];
     });
 
-    // TODO: Config/Level/NPCDialogue Config/Level/PropDialogue 를 추가로 봐야함
-    // 여기에 물건을 누르든지 NPC 에게 말을 거는 거든지 하는 게 있음
     console.log(`--------------- Related Missing Dialog ---------`);
     groupedMissingKeys.forEach(({ groupId, TalkSentenceIDs }) => {
       console.log('groupId', groupId);
