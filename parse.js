@@ -16,6 +16,7 @@ const MissionPath = 'Config/Level/Mission';
 const NPCDirPath = 'Config/Level/NPC';
 const NPCDialogueDirPath = 'Config/Level/NPCDialogue';
 const PropDialogueDirPath = 'Config/Level/PropDialogue';
+const MunicipalChatDirPath = 'Config/Level/MunicipalChat';
 
 // Static Data
 const MainMission = readJsonFile(normalizePath('ExcelOutput/MainMission.json'));
@@ -114,6 +115,39 @@ parseDialogue({ path: PropDialogueDirPath, dialogs: propDialog, context, label: 
 console.log('============================');
 console.log('-------- prop dialog -------');
 console.log(toJsonString(propDialog));
+console.log('----------------------------');
+
+const parseMunicipalChat = params => parseFile({
+  ...params,
+  fileHandle({ path, dialogs, label }) {
+    if (path === 'Config/Level/MunicipalChat/MunicipalChatConfig.json') { // 이상해서 뺌
+      return;
+    }
+    const json = readJsonFile(normalizePath(path));
+    const { MunicipalChatGroupDict } = json;
+    const dialog = [];
+    Object.values(MunicipalChatGroupDict).forEach(MunicipalChat => {
+      const chat = [];
+      const { NodeList } = MunicipalChat;
+      NodeList.forEach(Node => {
+        const { ActionList } = Node;
+        ActionList.forEach(Action => {
+          // Action: { TalkInfo; AnimationInfo }
+          if (Action.TalkInfo) {
+            chat.push(tt(Action.TalkInfo.TalkSentenceID));
+          }
+        });
+      });
+      dialog.push(chat);
+    });
+    dialogs.push({ [label]: path, dialog });
+  }
+});
+const municipalChatDialog = [];
+parseMunicipalChat({ path: MunicipalChatDirPath, dialogs: municipalChatDialog, label: 'munipicalChat' });
+console.log('============================');
+console.log('-------- municipal dialog -------');
+console.log(toJsonString(municipalChatDialog));
 console.log('----------------------------');
 
 // TODO: 조절 혹은 arguments
