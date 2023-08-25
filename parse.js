@@ -538,21 +538,52 @@ function parseTaskList(TaskList = [], context) {
  *
  * @returns ParsedTask = { type: string }
  * | { type: 'TriggerPerformance'; PerformanceType: 'PlayVideo' | 'A' | 'D' | 'C' 'E'; content: DialogSequence }
- * | { type: 'PlayVideo'; VideoID: string; captions: string[] }
+ * // speakings
+ * | { type: 'PlaySimpleTalk'; speakings: Talk[] }
+ * | { type: 'PlayAndWaitSimpleTalk'; speakings: Talk[] }
+ * | { type: 'BattlePlayTalk'; speakings: Talk[] }
+ * | { type: 'PlayNPCBubbleTalk'; speakings: Talk[] }
  * | { type: 'PlayMissionTalk'; speakings: Talk[] }
- * | { type: 'PropSetupUITrigger'; returns: ParsedTask[] }
+ * | { type: 'PlayTimeline-ComplexTalk-Recovered'; name: string; speakings: Talk[] }
+ * // speaking
+ * | { type: 'PerformanceTransition'; speaking: Talk }
+ * | { type: 'PlayScreenTransfer'; speaking: Talk }
+ * // value
  * | { type: 'TriggerCustomString'; value: string }
  * | { type: 'WaitCustomString'; value: string }
+ * // captions
+ * | { type: 'PlayVideo'; VideoID: string; captions: string[] }
  * | { type: 'PlayTimeline-Cutscene'; captions: string[], name: string }
+ * | { type: 'PlayTimeline-Cutscene (no config)'; captions: [], name: string }
  * | { type: 'PlayTimeline-ComplexTalk'; name: string }
- * | { type: 'PlayTimeline-ComplexTalk-Recovered'; name: string; speakings: Talk[] }
- * | { type: 'PlaySimpleTalk'; speakings: Talk[] }
+ * // options
  * | { type: 'PlayOptionTalk'; options: OptionTalk[] }
- * | { type: 'PlayAndWaitSimpleTalk'; speakings: Talk[] }
+ * // positive, negative
+ * | { type: 'PredicateTaskList'; Predicate: unknown; positive: ParsedTask[]; negative: ParsedTask[] }
+ * | { type: 'SwitchCase-Item'; Predicate: unknown; positive: ParsedTask[]; negative: ParsedTask[] }
+ * | { type: 'ConsumeMissionItemPerformance'; positive: ParsedTask[]; negative: ParsedTask[]; }
+ * | { type: 'SelectMissionItem': text: string | null; ItemSelect: unknown; positive: ParsedTask[]; negative: ParsedTask[]; cancel: ParsedTask[] }
+ * | { type: 'WaitPhotoGraphResult'; positive: ParsedTask[] }
+ * | { type: 'ShowEnvBuffDialog'; positive: ParsedTask[] }
+ * // taskList
+ * | { type: 'SwitchCase'; taskList: ParsedTask[] }
+ * | { type: 'PlaySequenceDialogue'; taskList: ParsedTask[] }
+ * | { type: 'SequenceConfig'; taskList: ParsedTask[] }
+ * // callback
+ * | { type: 'PropSetupUITrigger'; callback: ParsedTask[] }
+ * | { type: 'PropSetupTrigger'; callback: ParsedTask[] }
+ * | { type: 'RandomConfig'; callback: ParsedTask[] }
+ * | { type: 'PropStateExecute'; callback: ParsedTask[] }
+ * | { type: 'NpcToPlayerDistanceTrigger'; callback: ParsedTask[] }
+ * | { type: 'SelectorConfig'; callback: ParsedTask[] }
+ * | { type: 'PropStateChangeListenerConfig'; callback: ParsedTask[] }
+ * | { type: 'PropPuzzleEventListener'; callback: ParsedTask[] }
+ * // puzzles
+ * | { type: 'PuzzleBoxmanInBoard'; enter, leave }
+ * | { type: 'TakenMazePuzzleChallenge', reset }
+ * | { type: 'DronesPuzzleEventListener', leaveSafeArea, leaveMoveArea, switchFps, switchTps, chaseEnemyAdd }
+ * // etc
  * | { type: 'PlayMessage'; MessageSectionID: string }
- * | { type: 'PredicateTaskList'; Predicate: unknown; success: ParsedTask[]; failed: ParsedTask[] }
- * // 더 많이 추가됐음
- * |
  */
 function parseTask(Task, context = {}) {
   const { $type: type } = Task;
@@ -656,6 +687,94 @@ function parseTask(Task, context = {}) {
       }
       break;
     }
+
+    case 'RPG.GameCore.TriggerBattle': {
+      // 누구 누구랑 싸우는지 나옴
+      // ExcelOutput/PlaneEvent.json
+      // ExcelOutput/StageConfig.json
+      break;
+    }
+
+    // speakings
+    case 'RPG.GameCore.PlaySimpleTalk': {
+      const { SimpleTalkList } = Task;
+      const speakings = SimpleTalkList.map(({ TalkSentenceID }) => tt(TalkSentenceID));
+      return {
+        type: 'PlaySimpleTalk',
+        speakings,
+      };
+    }
+    case 'RPG.GameCore.PlayAndWaitSimpleTalk': {
+      const { SimpleTalkList } = Task;
+      const speakings = SimpleTalkList.map(({ TalkSentenceID }) => tt(TalkSentenceID));
+      return {
+        type: 'PlayAndWaitSimpleTalk',
+        speakings,
+      };
+    }
+    case 'RPG.GameCore.BattlePlayTalk': {
+      const { TalkList } = Task;
+      const speakings = TalkList.map(({ TalkSentenceID }) => tt(TalkSentenceID));
+      return {
+        type: 'BattlePlayTalk',
+        speakings,
+      };
+    }
+    case 'RPG.GameCore.PlayNPCBubbleTalk': {
+      // ignore
+      const { BubbleTalkInfoList } = Task;
+      const speakings = BubbleTalkInfoList.map(({ TalkSentenceID }) => tt(TalkSentenceID));
+      return {
+        type: 'PlayNPCBubbleTalk',
+        speakings,
+      };
+    }
+    case 'RPG.GameCore.PlayMissionTalk': {
+      const { SimpleTalkList } = Task;
+      const speakings = SimpleTalkList.map(({ TalkSentenceID }) => tt(TalkSentenceID));
+      return {
+        type: 'PlayMissionTalk',
+        speakings,
+      };
+    }
+
+    // speaking
+    case 'RPG.GameCore.PerformanceTransition': {
+      const { TalkSentenceID } = Task;
+      return {
+        type: 'PlayScreenTransfer',
+        speaking: tt(TalkSentenceID),
+      };
+    }
+    case 'RPG.GameCore.PlayScreenTransfer': { // 검은 화면 텍스트
+      const { TalkSentenceID } = Task;
+      return {
+        type: 'PlayScreenTransfer',
+        speaking: tt(TalkSentenceID),
+      };
+    }
+
+    // value
+    case 'RPG.GameCore.TriggerCustomStringOnDialogEnd':
+    case 'RPG.GameCore.TriggerCustomString': {
+      const { CustomString: { Value } } = Task;
+      return {
+        type: 'TriggerCustomString',
+        value: Value,
+      };
+    }
+    case 'RPG.GameCore.WaitCustomString': {
+      if (!Task.CustomString) {
+        return;
+      }
+      const { CustomString: { Value } } = Task;
+      return {
+        type: 'WaitCustomString',
+        value: Value,
+      };
+    }
+
+    // captions
     case 'RPG.GameCore.PlayVideo': {
       const { VideoID } = Task;
       if (!VideoConfig[VideoID]) {
@@ -682,50 +801,6 @@ function parseTask(Task, context = {}) {
         console.error(err);
         return;
       }
-    }
-    case 'RPG.GameCore.TriggerBattle': {
-      // 누구 누구랑 싸우는지 나옴
-      // ExcelOutput/PlaneEvent.json
-      // ExcelOutput/StageConfig.json
-      break;
-    }
-    case 'RPG.GameCore.PlayMissionTalk': {
-      const { SimpleTalkList } = Task;
-      const speakings = SimpleTalkList.map(({ TalkSentenceID }) => tt(TalkSentenceID));
-      return {
-        type: 'PlayMissionTalk',
-        speakings,
-      };
-    }
-    case 'RPG.GameCore.PropSetupUITrigger': {
-      const { ButtonCallback } = Task;
-      const callback = parseTaskList(ButtonCallback, context);
-      return {
-        type: 'PropSetupUITrigger',
-        callback,
-      };
-    }
-    case 'RPG.GameCore.TriggerCustomStringOnDialogEnd':
-    case 'RPG.GameCore.TriggerCustomString': {
-      const { CustomString: { Value } } = Task;
-      return {
-        type: 'TriggerCustomString',
-        value: Value,
-      };
-    }
-    case 'RPG.GameCore.WaitCustomString': {
-      if (!Task.CustomString) {
-        return;
-      }
-      const { CustomString: { Value } } = Task;
-      return {
-        type: 'WaitCustomString',
-        value: Value,
-      };
-    }
-    case 'RPG.GameCore.TriggerSound': {
-      // 사운드
-      break;
     }
     case 'RPG.GameCore.PlayTimeline': {
       const { Type, TimelineName }= Task;
@@ -771,14 +846,8 @@ function parseTask(Task, context = {}) {
       }
       break;
     }
-    case 'RPG.GameCore.PlaySimpleTalk': {
-      const { SimpleTalkList } = Task;
-      const speakings = SimpleTalkList.map(({ TalkSentenceID }) => tt(TalkSentenceID));
-      return {
-        type: 'PlaySimpleTalk',
-        speakings,
-      };
-    }
+
+    // options
     case 'RPG.GameCore.PlayOptionTalk': {
       const { OptionList } = Task;
       return {
@@ -790,23 +859,8 @@ function parseTask(Task, context = {}) {
         })),
       };
     }
-    case 'RPG.GameCore.PlayAndWaitSimpleTalk': {
-      const { SimpleTalkList } = Task;
-      const speakings = SimpleTalkList.map(({ TalkSentenceID }) => tt(TalkSentenceID));
-      return {
-        type: 'PlayAndWaitSimpleTalk',
-        speakings,
-      };
-    }
-    case 'RPG.GameCore.PlayMessage': {
-      const { MessageSectionID } = Task;
-      // ExcelOutput/MessageSectionConfig.json
-      // ExcelOutput/MessageItemConfig.json
-      return {
-        type: 'PlayMessage',
-        MessageSectionID,
-      };
-    }
+
+    // positive, negative
     case 'SwitchCase-Item':
     case 'RPG.GameCore.PredicateTaskListWithFail':
     case 'RPG.GameCore.PredicateTaskList': {
@@ -814,115 +868,52 @@ function parseTask(Task, context = {}) {
       return {
         type: $type ? 'PredicateTaskList' : 'SwitchCase-Item',
         Predicate,
-        success: SuccessTaskList ? parseTaskList(SuccessTaskList, context) : [],
-        failed: FailedTaskList ? parseTaskList(FailedTaskList, context) : [],
-      };
-    }
-    case 'RPG.GameCore.PerformanceTransition':
-    case 'RPG.GameCore.PlayScreenTransfer': { // 검은 화면 텍스트
-      const { TalkSentenceID } = Task;
-      return {
-        type: 'PlayScreenTransfer',
-        speaking: tt(TalkSentenceID),
-      };
-    }
-    case 'RPG.GameCore.PropSetupTrigger': { // 장소 이동 활성화
-      const { OnTriggerEnter } = Task;
-      const callback = parseTaskList(OnTriggerEnter, context);
-      return {
-        type: 'PropSetupTrigger',
-        callback,
-      };
-    }
-    case 'RPG.GameCore.RandomConfig': {
-      const { TaskList } = Task;
-      const callback = parseTaskList(TaskList, context);
-      return {
-        type: 'RandomConfig',
-        callback,
-      };
-    }
-    case 'RPG.GameCore.PropStateExecute': {
-      const { Execute } = Task;
-      const callback = parseTaskList(Execute, context);
-      return {
-        type: 'PropStateExecute',
-        callback,
-      };
-    }
-    case 'RPG.GameCore.NpcToPlayerDistanceTrigger': {
-      const { FarTask } = Task;
-      const callback = parseTaskList(FarTask, context);
-      return {
-        type: 'NpcToPlayerDistanceTrigger',
-        callback,
+        positive: SuccessTaskList ? parseTaskList(SuccessTaskList, context) : [],
+        negative: FailedTaskList ? parseTaskList(FailedTaskList, context) : [],
       };
     }
     case 'RPG.GameCore.ConsumeMissionItemPerformance': {
       const { OnSubmitConfirm, OnSubmitCancel } = Task;
-      const submit = parseTaskList(OnSubmitConfirm, context);
-      const cancel = parseTaskList(OnSubmitCancel, context);
+      const positive = parseTaskList(OnSubmitConfirm, context);
+      const negative = parseTaskList(OnSubmitCancel, context);
       return {
         type: 'ConsumeMissionItemPerformance',
-        submit,
-        cancel,
+        positive,
+        negative,
       };
     }
     case 'RPG.GameCore.SelectMissionItem': {
       const { SimpleTalk, ItemSelect, OnSubmitSucceed, OnSubmitFail, OnSubmitCancel } = Task;
-      const success = parseTaskList(OnSubmitSucceed, context);
-      const fail = parseTaskList(OnSubmitFail, context);
+      const positive = parseTaskList(OnSubmitSucceed, context);
+      const negative = parseTaskList(OnSubmitFail, context);
       const cancel = parseTaskList(OnSubmitCancel, context);
       return {
         type: 'SelectMissionItem',
         text: SimpleTalk ? tt(SimpleTalk.TalkSentenceID) : null,
         ItemSelect,
-        success,
-        fail,
+        positive,
+        negative,
         cancel,
       };
     }
     case 'RPG.GameCore.WaitPhotoGraphResult': {
       const { OnSuccess } = Task;
-      const success = parseTaskList(OnSuccess, context);
+      const positive = parseTaskList(OnSuccess, context);
       return {
         type: 'WaitPhotoGraphResult',
-        success,
-      };
-    }
-    case 'RPG.GameCore.SelectorConfig': {
-      const { TaskList } = Task;
-      const callback = parseTaskList(TaskList, context);
-      return {
-        type: 'RandomConfig',
-        callback,
+        positive,
       };
     }
     case 'RPG.GameCore.ShowEnvBuffDialog': {
       const { OnCancel } = Task;
-      const cancel = parseTaskList(OnCancel, context);
+      const positive = parseTaskList(OnCancel, context);
       return {
         type: 'ShowEnvBuffDialog',
-        cancel,
+        positive,
       };
     }
-    case 'RPG.GameCore.BattlePlayTalk': {
-      const { TalkList } = Task;
-      const speakings = TalkList.map(({ TalkSentenceID }) => tt(TalkSentenceID));
-      return {
-        type: 'BattlePlayTalk',
-        speakings,
-      };
-    }
-    case 'RPG.GameCore.PlayNPCBubbleTalk': {
-      // ignore
-      const { BubbleTalkInfoList } = Task;
-      const speakings = BubbleTalkInfoList.map(({ TalkSentenceID }) => tt(TalkSentenceID));
-      return {
-        type: 'PlayNPCBubbleTalk',
-        speakings,
-      };
-    }
+
+    // taskList
     case 'RPG.GameCore.SwitchCase': {
       const { TaskList, DefaultTask } = Task;
       return {
@@ -933,10 +924,10 @@ function parseTask(Task, context = {}) {
     }
     case 'RPG.GameCore.PlaySequenceDialogue': {
       const { Dialogues } = Task;
-      const dialogues = parseTaskList(Dialogues, context);
+      const taskList = parseTaskList(Dialogues, context);
       return {
         type: 'PlaySequenceDialogue',
-        dialogues,
+        taskList,
       };
     }
     case 'RPG.GameCore.SequenceConfig': {
@@ -947,7 +938,56 @@ function parseTask(Task, context = {}) {
       }
     }
 
-    case 'RPG.GameCore.PropStateChangeListenerConfig': {
+    // callback
+    case 'RPG.GameCore.PropSetupUITrigger': { // ?
+      const { ButtonCallback } = Task;
+      const callback = parseTaskList(ButtonCallback, context);
+      return {
+        type: 'PropSetupUITrigger',
+        callback,
+      };
+    }
+    case 'RPG.GameCore.PropSetupTrigger': { // 장소 이동 활성화
+      const { OnTriggerEnter } = Task;
+      const callback = parseTaskList(OnTriggerEnter, context);
+      return {
+        type: 'PropSetupTrigger',
+        callback,
+      };
+    }
+    case 'RPG.GameCore.RandomConfig': { // 아무거나 실행
+      const { TaskList } = Task;
+      const callback = parseTaskList(TaskList, context);
+      return {
+        type: 'RandomConfig',
+        callback,
+      };
+    }
+    case 'RPG.GameCore.PropStateExecute': { // 어디 가면
+      const { Execute } = Task;
+      const callback = parseTaskList(Execute, context);
+      return {
+        type: 'PropStateExecute',
+        callback,
+      };
+    }
+    case 'RPG.GameCore.NpcToPlayerDistanceTrigger': { // NPC 로부터 거리에 따라
+      const { FarTask } = Task;
+      const callback = parseTaskList(FarTask, context);
+      return {
+        type: 'NpcToPlayerDistanceTrigger',
+        callback,
+      };
+    }
+    case 'RPG.GameCore.SelectorConfig': {
+      const { TaskList } = Task;
+      const callback = parseTaskList(TaskList, context);
+      return {
+        type: 'RandomConfig',
+        callback,
+      };
+    }
+    case 'RPG.GameCore.PropStateChangeListenerConfig': { // ?
       const { OnCancel } = Task;
       const callback = parseTaskList(OnCancel, context);
       return {
@@ -955,7 +995,7 @@ function parseTask(Task, context = {}) {
         callback,
       }
     }
-    case 'RPG.GameCore.PropPuzzleEventListener': {
+    case 'RPG.GameCore.PropPuzzleEventListener': { // 퍼즐을 풀면
       const { FinishCallback } = Task;
       const callback = parseTaskList(FinishCallback, context);
       return {
@@ -963,6 +1003,8 @@ function parseTask(Task, context = {}) {
         callback,
       }
     }
+
+    // puzzles
     case 'RPG.GameCore.PuzzleBoxmanInBoard': {
       const { OnPlayerEnter, OnPlayerLeave } = Task;
       const enter = parseTaskList(OnPlayerEnter ?? [], context);
@@ -998,6 +1040,22 @@ function parseTask(Task, context = {}) {
         chaseEnemyAdd: parseTaskList(ChaseEnemyAddCallback ?? [], context),
       };
     }
+
+    // etc
+    case 'RPG.GameCore.PlayMessage': {
+      const { MessageSectionID } = Task;
+      // ExcelOutput/MessageSectionConfig.json
+      // ExcelOutput/MessageItemConfig.json
+      return {
+        type: 'PlayMessage',
+        MessageSectionID,
+      };
+    }
+    case 'RPG.GameCore.TriggerSound': {
+      // 사운드
+      break;
+    }
+
     default: {
       // console.warn('Unknown Task', JSON.stringify(Task, undefined, 2));
       restTaskType.add(type);
